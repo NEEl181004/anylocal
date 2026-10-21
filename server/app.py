@@ -347,7 +347,7 @@ def create_app():
 
     return app
 
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 
 async def handle_version(request):
     return web.json_response({
@@ -356,12 +356,10 @@ async def handle_version(request):
         "download_url": "/download/AnyLocal.exe",
         "apk_url": "/download/AnyLocal.apk",
         "changelog": [
-            "24/7 Cloud Relay support (no Tailscale disconnects)",
-            "Manual & automatic 1-click update buttons on EXE & APK",
-            "Shop Security Audit Engine for Quick Software (Lugda Bazaar)",
-            "6 Real-time shop security alerts (Prints, Deletes, Discounts, Sales Opened)",
-            "Multi-branch printer detection (Epson, TVS, TSC, POS-80, Canon, HP)",
-            "Auditing works seamlessly whether operated physically or remotely via AnyLocal"
+            "Dynamic PC branch discovery (Bhuj, Mandvi, etc. replacing PC A/B)",
+            "Local offline SQLite queue with auto-sync on reconnect (zero alert loss)",
+            "Pre-connection 24/7 alert capture to central DB before adding to phone",
+            "Real-time push alert broadcast across multiple phones simultaneously"
         ]
     })
 
