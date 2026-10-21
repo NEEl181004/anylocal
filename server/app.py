@@ -360,7 +360,14 @@ async def handle_download_exe(request):
     ]
     for p in candidate_paths:
         if os.path.exists(p):
-            return web.FileResponse(p)
+            file_size = os.path.getsize(p)
+            headers = {
+                "Content-Type": "application/vnd.microsoft.portable-executable",
+                "Content-Disposition": 'attachment; filename="AnyLocal.exe"',
+                "Content-Length": str(file_size),
+                "Cache-Control": "no-cache"
+            }
+            return web.FileResponse(p, headers=headers)
     return web.Response(status=404, text="AnyLocal.exe build not found on server yet.")
 
 async def handle_download_apk(request):
@@ -371,7 +378,16 @@ async def handle_download_apk(request):
     ]
     for p in candidate_paths:
         if os.path.exists(p):
-            return web.FileResponse(p)
+            file_size = os.path.getsize(p)
+            headers = {
+                "Content-Type": "application/vnd.android.package-archive",
+                "Content-Disposition": 'attachment; filename="AnyLocal.apk"',
+                "Content-Length": str(file_size),
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+            return web.FileResponse(p, headers=headers)
     return web.Response(status=404, text="AnyLocal.apk build not found on server yet.")
 
 if __name__ == "__main__":

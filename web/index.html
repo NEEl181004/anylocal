@@ -997,11 +997,9 @@
       <button class="btn-gradient" id="btnCheckAppUpdate">
         <span>🔄 Check for Updates Now</span>
       </button>
-      <a id="btnDownloadNewApk" href="#" style="display:none; text-decoration:none; margin-top:10px;" target="_blank">
-        <button class="btn-gradient" style="background:#16a34a; margin:0;">
-          <span>⬇️ Download & Install New AnyLocal.apk</span>
-        </button>
-      </a>
+      <button class="btn-gradient" id="btnDownloadNewApk" style="background:#16a34a; margin-top:10px; display:none;">
+        <span>⬇️ Download & Install New AnyLocal.apk</span>
+      </button>
     </div>
   </div>
 
@@ -2181,7 +2179,9 @@
               <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">• ${(data.changelog || []).join('<br>• ')}</div>
             `;
             const apkLink = `${targetUrl}/download/AnyLocal.apk`;
-            btnDownloadNewApk.href = apkLink;
+            btnDownloadNewApk.onclick = () => {
+              window.location.href = apkLink;
+            };
             btnDownloadNewApk.style.display = "block";
           } else {
             appUpdateStatus.innerHTML = `<span style="color:#22c55e; font-weight:700;">✅ You are running the latest version (v2.4.0)!</span>`;
