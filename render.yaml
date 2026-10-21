@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: anylocal-relay
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server/app.py
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PHONE_SECRET
+        value: anylocal_secure_2026
