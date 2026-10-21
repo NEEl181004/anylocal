@@ -1,0 +1,17 @@
+{
+  "name": "AnyLocal Remote Desktop",
+  "short_name": "AnyLocal",
+  "description": "Multi-Computer Remote Desktop Viewer for Shop & Branch PCs",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0284c7",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230284c7'/%3E%3Cpath d='M30 35 L70 35 L70 65 L30 65 Z' fill='%230b0f19' stroke='%2338bdf8' stroke-width='4'/%3E%3Cpath d='M45 65 L45 75 L55 75 L55 65' fill='%2338bdf8'/%3E%3Cpath d='M35 75 L65 75' stroke='%2338bdf8' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='50' cy='50' r='5' fill='%2322c55e'/%3E%3C/svg%3E",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

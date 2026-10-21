@@ -1,0 +1,2202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>AnyLocal Mobile Remote Desktop</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0284c7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root {
+      --bg-main: #070b14;
+      --bg-card: #0f172a;
+      --bg-card-border: rgba(255, 255, 255, 0.08);
+      --accent: #0284c7;
+      --accent-glow: #38bdf8;
+      --accent-gradient: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+      --text-primary: #f8fafc;
+      --text-muted: #94a3b8;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warning: #f59e0b;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      overflow: hidden;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* -------------------------------------------
+       VIEW 1: HOME & CONNECTION HUB (When not connected)
+       ------------------------------------------- */
+    #homeView {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 0%, #0f2744 0%, var(--bg-main) 70%);
+      overflow-y: auto;
+      touch-action: pan-y;
+      padding-bottom: 30px;
+    }
+    .home-header {
+      padding: 24px 20px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--bg-card-border);
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+    }
+    .home-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .home-logo-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--accent-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 15px rgba(2, 132, 199, 0.5);
+    }
+    .home-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #ffffff 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .home-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .home-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .icon-btn {
+      background: #1e293b;
+      color: #38bdf8;
+      border: 1px solid var(--bg-card-border);
+      border-radius: 10px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .icon-btn:active {
+      transform: scale(0.92);
+      background: #0284c7;
+      color: #fff;
+    }
+
+    /* Home Tabs */
+    .nav-tabs {
+      display: flex;
+      padding: 12px 18px 4px;
+      gap: 8px;
+    }
+    .nav-tab-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: #0f172a;
+      border: 1px solid var(--bg-card-border);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-tab-btn.active {
+      background: #1e293b;
+      color: #fff;
+      border-color: #0284c7;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+    }
+
+    .home-content {
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Cards */
+    .card {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: block;
+    }
+    .input-field {
+      width: 100%;
+      background: #0b1120;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-field:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+    }
+    .btn-gradient {
+      width: 100%;
+      background: var(--accent-gradient);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
+      margin-top: 6px;
+    }
+    .btn-gradient:active {
+      transform: scale(0.98);
+      filter: brightness(1.1);
+    }
+
+    /* Saved PC List Cards */
+    .pc-card-item {
+      background: #0b1120;
+      border: 1px solid #1e293b;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+    .pc-card-item:hover, .pc-card-item:active {
+      border-color: #0284c7;
+    }
+    .pc-info {
+      flex: 1;
+      min-width: 0;
+      padding-right: 12px;
+    }
+    .pc-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pc-address {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .btn-connect-sm {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .btn-connect-sm:active {
+      background: #0369a1;
+      transform: scale(0.95);
+    }
+    .btn-del-sm {
+      background: transparent;
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-left: 6px;
+      flex-shrink: 0;
+    }
+
+    /* Security Alerts & Metrics Styling */
+    .pc-filter-bar {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .pc-filter-bar::-webkit-scrollbar { display: none; }
+    .pc-filter-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .pc-filter-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.4);
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .metric-card {
+      background: #0b1120;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 10px 4px;
+      text-align: center;
+    }
+    .metric-val {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .metric-lbl {
+      font-size: 9px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .alert-feed-card {
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+      border-left: 4px solid #38bdf8;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      animation: fadeIn 0.3s ease;
+    }
+    .alert-feed-card.danger {
+      border-left-color: #ef4444;
+      background: rgba(30, 15, 20, 0.9);
+    }
+    .alert-feed-card.warning {
+      border-left-color: #f59e0b;
+      background: rgba(30, 24, 15, 0.9);
+    }
+    .alert-feed-card.success {
+      border-left-color: #22c55e;
+      background: rgba(15, 30, 20, 0.9);
+    }
+    .alert-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .alert-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-success { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .alert-pc-tag {
+      font-size: 10px;
+      color: #94a3b8;
+      background: #1e293b;
+      padding: 2px 7px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    .alert-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+    .alert-details {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+    .alert-meta {
+      font-size: 10px;
+      color: #64748b;
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* QR Scanner Modal */
+    #qrScannerModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 600;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 20px 40px;
+    }
+    .qr-viewfinder-box {
+      width: 260px;
+      height: 260px;
+      border: 3px solid #38bdf8;
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+    }
+    .qr-laser-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #ef4444;
+      box-shadow: 0 0 10px #ef4444;
+      animation: scanLaser 2s infinite ease-in-out;
+    }
+    @keyframes scanLaser {
+      0% { top: 0%; }
+      50% { top: 96%; }
+      100% { top: 0%; }
+    }
+    #cameraVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* -------------------------------------------
+       VIEW 2: REMOTE DESKTOP WORKSPACE (When connected)
+       ------------------------------------------- */
+    #remoteView {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      background: #020617;
+    }
+
+    /* Glass Top Floating Island */
+    #topIsland {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 24px;
+      padding: 5px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 100;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      max-width: 96vw;
+    }
+    .island-pc-btn {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 140px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .island-stat {
+      font-size: 10px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 600;
+    }
+    .stat-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 6px var(--success);
+    }
+    .island-exit-btn {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Canvas Viewport */
+    #viewport {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #020617;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #screenCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      outline: none;
+      transform-origin: 0 0;
+    }
+
+    /* Floating 1:1 Reset Button */
+    #btnResetView {
+      position: fixed;
+      top: 56px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      color: #38bdf8;
+      border: 1px solid #0284c7;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+      z-index: 150;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Magnifier Loupe for Small Buttons (Cancel, X, Checkboxes) */
+    #magnifierLoupe {
+      position: fixed;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      border: 3px solid #38bdf8;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 18px rgba(56, 189, 248, 0.5);
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 500;
+      display: none;
+      background: #020617;
+      transform: translate(-50%, -100%);
+    }
+    #loupeCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .loupe-reticle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      border: 1.5px solid #ef4444;
+      border-radius: 50%;
+      box-shadow: 0 0 4px #000;
+    }
+    .loupe-reticle::before {
+      content: '';
+      position: absolute;
+      top: 8px;
+      left: -9px;
+      width: 36px;
+      height: 1.5px;
+      background: #ef4444;
+    }
+    .loupe-reticle::after {
+      content: '';
+      position: absolute;
+      top: -9px;
+      left: 8px;
+      width: 1.5px;
+      height: 36px;
+      background: #ef4444;
+    }
+    .loupe-coord {
+      position: absolute;
+      bottom: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      color: #38bdf8;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    /* Right-side Mobile Scroll Strip */
+    #scrollStrip {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 28px;
+      background: rgba(15, 23, 42, 0.35);
+      border-left: 1px dashed rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      z-index: 40;
+      color: #64748b;
+      font-size: 10px;
+    }
+
+    /* Mobile Floating Action Dock */
+    #mobileDock {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      z-index: 200;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      max-width: 96vw;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    #mobileDock::-webkit-scrollbar { display: none; }
+    .dock-btn {
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .dock-btn:active {
+      background: #0284c7;
+      color: white;
+      transform: scale(0.95);
+    }
+    .dock-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+    }
+
+    /* Text & Keyboard Drawer */
+    #textDrawer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #0f172a;
+      border-top: 1px solid #334155;
+      padding: 12px 14px 20px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 300;
+      box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.6);
+    }
+    .text-input-row {
+      display: flex;
+      gap: 8px;
+    }
+    #textInput {
+      flex: 1;
+      padding: 10px 14px;
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+    }
+    .quick-keys-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .key-chip {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .key-chip:active {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+
+    /* Shortcuts Sheet Modal */
+    #shortcutsSheet {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 400;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .sheet-card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 24px 24px 0 0;
+      width: 100%;
+      max-width: 520px;
+      padding: 18px 18px 30px;
+    }
+    .sheet-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .sheet-btn {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      text-align: center;
+    }
+    .sheet-btn:active {
+      background: #0284c7;
+      color: white;
+    }
+
+    /* Precision Nudge D-Pad */
+    .nudge-btn {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .nudge-btn:active {
+      background: #0284c7;
+      color: #fff;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.94);
+      color: #f8fafc;
+      border: 1px solid #38bdf8;
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      display: none;
+      animation: fadeIn 0.2s ease;
+      white-space: nowrap;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -10px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================
+       VIEW 1: HOME & CONNECTION HUB
+       ========================================== -->
+  <div id="homeView">
+    <div class="home-header">
+      <div class="home-brand">
+        <div class="home-logo-icon">⚡</div>
+        <div>
+          <div class="home-title">AnyLocal Mobile</div>
+          <div class="home-subtitle">Multi-Branch Remote Desktop</div>
+        </div>
+      </div>
+      <div class="home-actions">
+        <button class="icon-btn" id="btnServerSettings" title="Server & App Updates" style="color:#38bdf8;">🔄</button>
+        <button class="icon-btn" id="btnOpenScan" title="Scan QR Code">📷</button>
+        <button class="icon-btn" id="btnHelp" title="Tailscale Help">🌐</button>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="nav-tab-btn active" id="tabMyPcs">🏢 My Computers</button>
+      <button class="nav-tab-btn" id="tabDirectConnect">⚡ Direct Connect</button>
+      <button class="nav-tab-btn" id="tabSecurityAlerts" style="color:#f87171;">🚨 Security Alerts <span id="alertsBadge" style="display:none; background:#ef4444; color:#fff; font-size:9px; padding:1px 6px; border-radius:10px; margin-left:4px; font-weight:800;">0</span></button>
+    </div>
+
+    <div class="home-content">
+      <!-- Section A: My Saved Computers (Address Book) -->
+      <div id="secMyPcs">
+        <div class="card">
+          <div class="card-title">
+            <span>Saved Shop Branches</span>
+            <span style="font-size:11px; color:#38bdf8; cursor:pointer;" id="btnAddPcShortcut">+ Add PC</span>
+          </div>
+
+          <div id="homePcListContainer">
+            <!-- Dynamically Rendered -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Section B: Direct Connect (For connecting from far away / new computers) -->
+      <div id="secDirectConnect" style="display:none;">
+        <div class="card">
+          <div class="card-title">Connect to Remote Computer</div>
+          
+          <div class="form-group">
+            <label class="form-label">Computer Name (e.g. Branch 1 - Cashier)</label>
+            <input type="text" id="directName" class="input-field" placeholder="Branch 1 - Cashier">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Tailscale IP or LAN IP Address</label>
+            <input type="text" id="directHost" class="input-field" placeholder="100.x.y.z (Tailscale) or 192.168.x.x">
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Port</label>
+              <input type="number" id="directPort" class="input-field" value="8765">
+            </div>
+            <div class="form-group" style="flex:2;">
+              <label class="form-label">Access PIN or Permanent Password</label>
+              <input type="password" id="directPin" class="input-field" placeholder="PIN / Password">
+            </div>
+          </div>
+
+          <button class="btn-gradient" id="btnDoDirectConnect">
+            <span>🚀 Connect to Remote PC</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section C: Security & Audit Alerts (Strictly for Phone APK) -->
+      <div id="secSecurityAlerts" style="display:none;">
+        <div class="card" style="border-color:rgba(239, 68, 68, 0.35);">
+          <div class="card-title" style="color:#f87171;">
+            <span>🚨 Shop Security Audit Feed</span>
+            <button class="btn-connect-sm" id="btnRefreshAlerts" style="padding:4px 10px; font-size:11px;">🔄 Refresh</button>
+          </div>
+          <div style="font-size:11px; color:#94a3b8; margin-bottom:12px;">
+            Auditing Quick Software billing events. Data is strictly private to your phone & auto-purges after 3 days.
+          </div>
+
+          <!-- PC Selector Pills -->
+          <div class="pc-filter-bar" id="pcFilterBar">
+            <button class="pc-filter-btn active" data-filter="all">All PCs</button>
+            <button class="pc-filter-btn" data-filter="PC-A">🖥️ PC A</button>
+            <button class="pc-filter-btn" data-filter="PC-B">🖥️ PC B</button>
+          </div>
+
+          <!-- Summary Metrics -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-val" id="metricPrinted" style="color:#22c55e;">0</div>
+              <div class="metric-lbl">Bills Printed</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" id="metricItemDel" style="color:#f87171;">0</div>
+              <div class="metric-lbl">Items Deleted</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" id="metricDiscounts" style="color:#f59e0b;">0</div>
+              <div class="metric-lbl">Discounts</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" id="metricBillDel" style="color:#dc2626;">0</div>
+              <div class="metric-lbl">Bills Deleted</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Feed Container -->
+        <div id="alertsFeedContainer" style="margin-top:12px;">
+          <div style="text-align:center; padding:30px 10px; color:#64748b; font-size:12px;">
+            Waiting for activity on Quick Software...<br>
+            <span style="font-size:10px; color:#475569;">Prints, row deletions, and discounts will appear here live.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Scanner Modal -->
+  <div id="qrScannerModal">
+    <div style="text-align:center; margin-top:20px;">
+      <h3 style="font-size:18px; color:#38bdf8;">📷 Scan Computer QR Code</h3>
+      <p style="font-size:12px; color:#94a3b8; margin-top:4px;">Point camera at the QR code displayed on AnyLocal Host screen.</p>
+    </div>
+
+    <div class="qr-viewfinder-box">
+      <video id="cameraVideo" playsinline autoplay></video>
+      <div class="qr-laser-line"></div>
+    </div>
+
+    <div style="display:flex; gap:12px; width:100%; max-width:280px;">
+      <button class="btn-gradient" id="btnCloseQr" style="background:#334155; margin:0;">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Server Settings & Updates Modal -->
+  <div id="serverSettingsModal" style="position:fixed; inset:0; background:rgba(7,11,20,0.96); z-index:650; display:none; flex-direction:column; padding:24px 20px 40px; overflow-y:auto; touch-action:pan-y;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+      <h3 style="font-size:17px; font-weight:800; color:#38bdf8;">☁️ Cloud Server & App Updates</h3>
+      <button class="btn-del-sm" id="btnCloseSettingsModal" style="padding:6px 12px; font-size:12px;">✕ Close</button>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">Installed Version</div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:14px; font-weight:700; color:#fff;">v2.4.0 (Security & Audit Edition)</span>
+        <span style="background:#0284c7; color:#fff; font-size:10px; padding:2px 8px; border-radius:10px; font-weight:700;">PRO</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">Render Cloud Server Configuration</div>
+      <div class="form-group">
+        <label class="form-label">Cloud Server URL (24/7 Relay & Database)</label>
+        <input type="text" id="cfgCloudUrl" class="input-field" placeholder="https://anylocal-relay.onrender.com">
+      </div>
+      <button class="btn-gradient" id="btnSaveCloudUrl" style="padding:10px; font-size:12px; margin-top:4px;">
+        <span>💾 Save Server URL</span>
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Live Update Status</div>
+      <div id="appUpdateStatus" style="font-size:12px; color:#94a3b8; line-height:1.5; margin-bottom:12px;">
+        Tap below to check if a new update was deployed on your Render server.
+      </div>
+      <button class="btn-gradient" id="btnCheckAppUpdate">
+        <span>🔄 Check for Updates Now</span>
+      </button>
+      <a id="btnDownloadNewApk" href="#" style="display:none; text-decoration:none; margin-top:10px;" target="_blank">
+        <button class="btn-gradient" style="background:#16a34a; margin:0;">
+          <span>⬇️ Download & Install New AnyLocal.apk</span>
+        </button>
+      </a>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       VIEW 2: REMOTE DESKTOP WORKSPACE (Connected)
+       ========================================== -->
+  <div id="remoteView">
+    <!-- Glass Top Floating Island -->
+    <div id="topIsland">
+      <button class="island-pc-btn" id="islandSwitchBtn">
+        <span id="remotePcLabel">Desktop</span> ▾
+      </button>
+      <div class="island-stat">
+        <div class="stat-dot" id="remoteStatusDot"></div>
+        <span id="remotePingVal">12ms</span>
+      </div>
+      <div class="island-stat" id="remoteControlState" style="color:#22c55e;">
+        🎮 Active
+      </div>
+      <button class="island-exit-btn" id="btnDisconnect">✕ Exit</button>
+    </div>
+
+    <!-- Floating 1:1 Reset Button -->
+    <button id="btnResetView" title="Reset View to 1:1 Fit">🔄 1:1 Reset</button>
+
+    <!-- Magnifier Loupe for Tiny Buttons -->
+    <div id="magnifierLoupe">
+      <canvas id="loupeCanvas" width="130" height="130"></canvas>
+      <div class="loupe-reticle"></div>
+      <div class="loupe-coord">🎯 Aim Small Button</div>
+    </div>
+
+    <!-- Canvas Viewport -->
+    <div id="viewport">
+      <canvas id="screenCanvas" tabindex="0"></canvas>
+
+      <!-- Right-Edge Scroll Strip -->
+      <div id="scrollStrip">
+        <span>▲</span>
+        <span>S<br>C<br>R<br>O<br>L<br>L</span>
+        <span>▼</span>
+      </div>
+    </div>
+
+    <!-- Mobile Floating Action Dock -->
+    <div id="mobileDock">
+      <button class="dock-btn" id="dockWake" title="Wake display & unlock screen" style="color:#38bdf8; font-weight:700;">⚡ Wake</button>
+      <button class="dock-btn" id="dockEnterKey" title="Confirm / Submit Row" style="background:#059669; color:#fff; font-weight:700;">⏎ Enter</button>
+      <button class="dock-btn" id="dockTabKey" title="Next Field (Tab)">⇥ Tab</button>
+      <button class="dock-btn" id="dockEsc" title="Cancel active dialog (Esc)" style="color:#f87171;">❌ Esc</button>
+      <button class="dock-btn" id="dockKeyboard" title="Open Keyboard & Voice">⌨️ Type</button>
+      <button class="dock-btn" id="dockAlertsBtn" title="View Security Alerts" style="color:#f59e0b;">🚨 Alerts <span id="dockAlertsBadge" style="display:none; background:#ef4444; color:#fff; font-size:9px; padding:1px 4px; border-radius:8px; font-weight:800;">0</span></button>
+      <button class="dock-btn" id="dockPanToggle" title="Toggle 1-Finger Screen Shift">✋ Pan</button>
+      <button class="dock-btn active" id="dockLoupeToggle" title="Toggle Magnifier Lens">🎯 Loupe</button>
+      <button class="dock-btn" id="dockZoom" title="Cycle Zoom Levels">🔍 <span id="zoomLevelText">1.0x</span></button>
+      <button class="dock-btn" id="dockMore" title="Shortcuts & Settings">⚡ More</button>
+    </div>
+  </div>
+
+  <!-- Text Input & Keyboard Drawer -->
+  <div id="textDrawer">
+    <div class="text-input-row">
+      <input type="text" id="textInput" placeholder="Type or use Voice Dictation on phone..." autocomplete="off">
+      <button class="btn-connect-sm" id="btnSendText" style="padding:0 16px;">Send</button>
+      <button class="btn-del-sm" id="btnCloseText">✕</button>
+    </div>
+    <div class="quick-keys-row">
+      <span class="key-chip" data-key="enter">⏎ Enter</span>
+      <span class="key-chip" data-key="backspace">⌫ Backspace</span>
+      <span class="key-chip" data-key="tab">⇥ Tab</span>
+      <span class="key-chip" data-key="space">Space</span>
+      <span class="key-chip" data-key="esc">Esc</span>
+      <span class="key-chip" data-combo="copy">Copy</span>
+      <span class="key-chip" data-combo="paste">Paste</span>
+    </div>
+  </div>
+
+  <!-- Shortcuts Sheet Modal -->
+  <div id="shortcutsSheet">
+    <div class="sheet-card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="font-size:15px; font-weight:700; color:#38bdf8;">Remote Actions & Tools</h3>
+        <button class="btn-del-sm" id="btnCloseSheet">✕ Close</button>
+      </div>
+
+      <div class="sheet-grid">
+        <button class="sheet-btn" data-combo="wake_unlock" style="background:rgba(2,132,199,0.25); border-color:#0284c7;"><span>🔓</span><span>Wake & Sign-In</span></button>
+        <button class="sheet-btn" data-combo="win"><span>⊞</span><span>Win Key</span></button>
+        <button class="sheet-btn" data-combo="alt_tab"><span>⇥</span><span>Alt+Tab</span></button>
+        <button class="sheet-btn" data-combo="task_manager"><span>⚙</span><span>Task Mgr</span></button>
+        <button class="sheet-btn" data-combo="show_desktop"><span>🖥</span><span>Desktop</span></button>
+        <button class="sheet-btn" data-combo="copy"><span>📄</span><span>Copy</span></button>
+        <button class="sheet-btn" data-combo="paste"><span>📋</span><span>Paste</span></button>
+        <button class="sheet-btn" id="btnFsToggle"><span>⛶</span><span>Fullscreen</span></button>
+        <button class="sheet-btn" id="btnQualityToggle"><span>📺</span><span id="lblQuality">Quality: 65%</span></button>
+        <button class="sheet-btn" id="btnSwitchPcSheet"><span>🖥️</span><span>Switch PC</span></button>
+      </div>
+
+      <!-- Precision Mouse Nudge (For Microscopic Buttons) -->
+      <div style="margin-top:14px; background:#1e293b; border-radius:14px; padding:12px; border:1px solid #334155;">
+        <div style="font-size:11px; font-weight:700; color:#38bdf8; margin-bottom:8px; text-align:center;">
+          🎯 Precision Pixel Nudge (For Tiny Buttons)
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+          <button class="nudge-btn" id="nudgeUp">▲ Up (2px)</button>
+          <div style="display:flex; gap:6px;">
+            <button class="nudge-btn" id="nudgeLeft">◀ Left</button>
+            <button class="nudge-btn" id="nudgeClick" style="background:#0284c7; color:#fff;">🎯 CLICK</button>
+            <button class="nudge-btn" id="nudgeRight">Right ▶</button>
+          </div>
+          <button class="nudge-btn" id="nudgeDown">▼ Down (2px)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIN Prompt Modal -->
+  <div id="pinModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:900; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#0f172a; border:1px solid #0284c7; border-radius:20px; padding:24px; width:100%; max-width:360px; box-shadow:0 20px 50px rgba(0,0,0,0.8); text-align:center;">
+      <div style="font-size:16px; font-weight:700; color:#38bdf8; margin-bottom:6px;" id="pinModalTitle">🔑 Enter Verification Code</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:14px; line-height:1.4;" id="pinModalDesc">Enter the 6-digit PIN displayed on the PC screen:</p>
+      <input type="text" id="pinModalInput" class="input-field" placeholder="e.g. 123456" style="text-align:center; font-size:22px; font-weight:700; letter-spacing:4px; margin-bottom:16px;" autofocus>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-gradient" id="btnPinModalSubmit" style="flex:1;"><span>🚀 Connect</span></button>
+        <button class="btn-del-sm" id="btnPinModalCancel" style="padding:10px 16px; border-radius:12px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // --- DOM Elements ---
+    const homeView = document.getElementById("homeView");
+    const remoteView = document.getElementById("remoteView");
+    const tabMyPcs = document.getElementById("tabMyPcs");
+    const tabDirectConnect = document.getElementById("tabDirectConnect");
+    const secMyPcs = document.getElementById("secMyPcs");
+    const secDirectConnect = document.getElementById("secDirectConnect");
+    const homePcListContainer = document.getElementById("homePcListContainer");
+    
+    // Canvas & Viewport
+    const canvas = document.getElementById("screenCanvas");
+    // Hardware accelerated desynchronized canvas context with fallback
+    let ctx = null;
+    try {
+      ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+    } catch(e) {}
+    if (!ctx) ctx = canvas.getContext("2d");
+    const viewport = document.getElementById("viewport");
+    const topIsland = document.getElementById("topIsland");
+    const remotePcLabel = document.getElementById("remotePcLabel");
+    const remoteStatusDot = document.getElementById("remoteStatusDot");
+    const remotePingVal = document.getElementById("remotePingVal");
+    const remoteControlState = document.getElementById("remoteControlState");
+    const scrollStrip = document.getElementById("scrollStrip");
+    const textDrawer = document.getElementById("textDrawer");
+    const textInput = document.getElementById("textInput");
+    const shortcutsSheet = document.getElementById("shortcutsSheet");
+    const qrScannerModal = document.getElementById("qrScannerModal");
+    const cameraVideo = document.getElementById("cameraVideo");
+
+    // --- State Variables ---
+    let ws = null;
+    let isAuthenticated = false;
+    let isViewOnly = false;
+    let remoteWidth = 1920;
+    let remoteHeight = 1080;
+    let lastPingSent = 0;
+    let pingInterval = null;
+    let currentQuality = 65;
+    let activeCameraStream = null;
+    let qrScanInterval = null;
+
+    // Zoom & Pan Viewport State
+    let zoomLevel = 1.0;
+    let panX = 0, panY = 0;
+    let isPanMode = false;      // When true, 1 finger shifts screen in all 4 directions
+    let isLoupeEnabled = true;  // Magnifier Loupe for small buttons (Cancel, X)
+    let isLoupeActive = false;
+
+    // Multi-touch gestures
+    let initialPinchDist = 0;
+    let initialZoom = 1.0;
+    let initialMidX = 0, initialMidY = 0;
+    let initialPanX = 0, initialPanY = 0;
+    let isPinching = false;
+
+    let touchStartX = 0, touchStartY = 0, lastTouchX = 0, lastTouchY = 0;
+    let touchStartTime = 0, hasMoved = false;
+
+    const loupeEl = document.getElementById("magnifierLoupe");
+    const loupeCanvas = document.getElementById("loupeCanvas");
+    const loupeCtx = loupeCanvas.getContext("2d");
+
+    // --- Storage & Multi-Computer Management ---
+    function getSavedComputers() {
+      const saved = localStorage.getItem("anylocal_saved_pcs");
+      if (saved) {
+        try { return JSON.parse(saved); } catch(e) {}
+      }
+      const defaultHost = window.location.hostname || "127.0.0.1";
+      const defaultPort = window.location.port || "8765";
+      const hashPin = window.location.hash.replace("#", "");
+      const defaultList = [
+        { id: "pc_branch1", name: "Branch 1 - Cashier", host: defaultHost, port: defaultPort, pin: hashPin || "" },
+        { id: "pc_branch2", name: "Branch 2 - Accounts", host: "100.85.20.15", port: "8765", pin: "" }
+      ];
+      saveComputersList(defaultList);
+      return defaultList;
+    }
+
+    function saveComputersList(list) {
+      localStorage.setItem("anylocal_saved_pcs", JSON.stringify(list));
+    }
+
+    let savedPcs = getSavedComputers();
+    let currentConnectingPc = null;
+
+    function renderHomePcList() {
+      homePcListContainer.innerHTML = "";
+      if (savedPcs.length === 0) {
+        homePcListContainer.innerHTML = `<div style="text-align:center; padding:20px; color:#64748b; font-size:12px;">No computers saved yet. Tap 'Direct Connect' or 'Scan QR' to add one.</div>`;
+        return;
+      }
+      savedPcs.forEach((pc, idx) => {
+        const item = document.createElement("div");
+        item.className = "pc-card-item";
+        item.innerHTML = `
+          <div class="pc-info">
+            <div class="pc-name">🏢 ${pc.name}</div>
+            <div class="pc-address">${pc.host}:${pc.port}</div>
+          </div>
+          <button class="btn-connect-sm" data-idx="${idx}">⚡ Connect</button>
+          <button class="btn-del-sm" data-del="${idx}">🗑️</button>
+        `;
+        homePcListContainer.appendChild(item);
+      });
+
+      // Bind Connect Buttons
+      homePcListContainer.querySelectorAll(".btn-connect-sm").forEach(b => {
+        b.onclick = () => {
+          const idx = parseInt(b.getAttribute("data-idx"));
+          startConnection(savedPcs[idx]);
+        };
+      });
+
+      // Bind Delete Buttons
+      homePcListContainer.querySelectorAll(".btn-del-sm").forEach(b => {
+        b.onclick = () => {
+          const idx = parseInt(b.getAttribute("data-del"));
+          if (confirm(`Remove ${savedPcs[idx].name}?`)) {
+            savedPcs.splice(idx, 1);
+            saveComputersList(savedPcs);
+            renderHomePcList();
+          }
+        };
+      });
+    }
+
+    // --- Toast Notifications ---
+    function showToast(msg) {
+      const toast = document.getElementById("toast");
+      toast.innerText = msg;
+      toast.style.display = "block";
+      setTimeout(() => toast.style.display = "none", 3200);
+    }
+
+    // --- Home Tab Navigation & Security Alerts ---
+    const tabSecurityAlerts = document.getElementById("tabSecurityAlerts");
+    const secSecurityAlerts = document.getElementById("secSecurityAlerts");
+    const alertsFeedContainer = document.getElementById("alertsFeedContainer");
+    const alertsBadge = document.getElementById("alertsBadge");
+    const dockAlertsBadge = document.getElementById("dockAlertsBadge");
+
+    let currentAlertFilter = "all";
+    let cachedAlerts = [];
+    let unreadAlertsCount = 0;
+
+    tabMyPcs.onclick = () => {
+      tabMyPcs.classList.add("active");
+      tabDirectConnect.classList.remove("active");
+      tabSecurityAlerts.classList.remove("active");
+      secMyPcs.style.display = "block";
+      secDirectConnect.style.display = "none";
+      secSecurityAlerts.style.display = "none";
+    };
+    tabDirectConnect.onclick = () => {
+      tabDirectConnect.classList.add("active");
+      tabMyPcs.classList.remove("active");
+      tabSecurityAlerts.classList.remove("active");
+      secDirectConnect.style.display = "block";
+      secMyPcs.style.display = "none";
+      secSecurityAlerts.style.display = "none";
+    };
+    tabSecurityAlerts.onclick = () => {
+      tabSecurityAlerts.classList.add("active");
+      tabMyPcs.classList.remove("active");
+      tabDirectConnect.classList.remove("active");
+      secSecurityAlerts.style.display = "block";
+      secMyPcs.style.display = "none";
+      secDirectConnect.style.display = "none";
+      unreadAlertsCount = 0;
+      updateBadgeUI();
+      fetchSecurityAlerts();
+    };
+
+    function updateBadgeUI() {
+      if (unreadAlertsCount > 0) {
+        alertsBadge.innerText = unreadAlertsCount;
+        alertsBadge.style.display = "inline-block";
+        if (dockAlertsBadge) {
+          dockAlertsBadge.innerText = unreadAlertsCount;
+          dockAlertsBadge.style.display = "inline-block";
+        }
+      } else {
+        alertsBadge.style.display = "none";
+        if (dockAlertsBadge) dockAlertsBadge.style.display = "none";
+      }
+    }
+
+    async function fetchSecurityAlerts() {
+      const cloudUrl = (localStorage.getItem("cloud_relay_url") || "").trim().replace(/\/+$/, "");
+      let url = "";
+      if (cloudUrl) {
+        url = `${cloudUrl}/api/alerts?pc_id=${currentAlertFilter}`;
+      } else {
+        const activeHost = currentConnectingPc ? currentConnectingPc.host : (window.location.hostname || "127.0.0.1");
+        const activePort = currentConnectingPc ? currentConnectingPc.port : (window.location.port || "8765");
+        url = `http://${activeHost}:${activePort}/api/alerts?pc_id=${currentAlertFilter}`;
+      }
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.alerts) {
+            cachedAlerts = data.alerts;
+            renderAlertsList();
+          }
+        }
+      } catch(e) {
+        console.warn("Could not fetch alerts:", e);
+      }
+    }
+
+    function renderAlertsList() {
+      if (!alertsFeedContainer) return;
+      const filtered = currentAlertFilter === "all" 
+        ? cachedAlerts 
+        : cachedAlerts.filter(a => a.pc_id === currentAlertFilter);
+
+      // Update metrics
+      let printed = 0, itemDel = 0, discounts = 0, billDel = 0;
+      cachedAlerts.forEach(a => {
+        if (a.event_type === "BILL_PRINTED") printed++;
+        else if (a.event_type === "ITEM_DELETED") itemDel++;
+        else if (a.event_type === "DISCOUNT_APPLIED") discounts++;
+        else if (a.event_type === "BILL_DELETED") billDel++;
+      });
+      document.getElementById("metricPrinted").innerText = printed;
+      document.getElementById("metricItemDel").innerText = itemDel;
+      document.getElementById("metricDiscounts").innerText = discounts;
+      document.getElementById("metricBillDel").innerText = billDel;
+
+      if (filtered.length === 0) {
+        alertsFeedContainer.innerHTML = `
+          <div style="text-align:center; padding:35px 10px; color:#64748b; font-size:12px;">
+            No alerts recorded for ${currentAlertFilter === 'all' ? 'any PC' : currentAlertFilter} in the last 3 days.<br>
+            <span style="font-size:10px; color:#475569;">Quick Software actions will log here in real time.</span>
+          </div>`;
+        return;
+      }
+
+      alertsFeedContainer.innerHTML = filtered.map(a => {
+        const severityClass = a.severity || "info";
+        const badgeClass = `badge-${severityClass}`;
+        return `
+          <div class="alert-feed-card ${severityClass}">
+            <div class="alert-header">
+              <span class="alert-badge ${badgeClass}">${(a.event_type || 'ALERT').replace(/_/g, ' ')}</span>
+              <span class="alert-pc-tag">🖥️ ${a.pc_name || a.pc_id}</span>
+            </div>
+            <div class="alert-title">${a.title}</div>
+            <div class="alert-details">${a.details}</div>
+            <div class="alert-meta">
+              <span>🕒 ${a.created_at}</span>
+              ${a.amount > 0 ? `<span style="font-weight:700; color:#38bdf8;">Amount: ₹${a.amount.toFixed(2)}</span>` : ''}
+              ${a.discount > 0 ? `<span style="font-weight:700; color:#f59e0b;">Discount: -₹${a.discount.toFixed(2)}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Filter pill clicks
+    document.querySelectorAll(".pc-filter-btn").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll(".pc-filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentAlertFilter = btn.getAttribute("data-filter");
+        renderAlertsList();
+      };
+    });
+
+    document.getElementById("btnRefreshAlerts").onclick = () => {
+      fetchSecurityAlerts();
+      showToast("🔄 Alerts Refreshed");
+    };
+
+    function handleIncomingSecurityAlert(alert) {
+      cachedAlerts.unshift(alert);
+      unreadAlertsCount++;
+      updateBadgeUI();
+      renderAlertsList();
+      showToast(`🚨 ALERT: ${alert.title}`);
+      if (navigator.vibrate) {
+        try { navigator.vibrate([100, 50, 100]); } catch(e) {}
+      }
+    }
+
+    // Auto-poll alerts every 6 seconds
+    setInterval(fetchSecurityAlerts, 6000);
+
+    document.getElementById("btnAddPcShortcut").onclick = () => {
+      tabDirectConnect.click();
+    };
+
+    // --- Direct Connect Button Action ---
+    document.getElementById("btnDoDirectConnect").onclick = () => {
+      const name = document.getElementById("directName").value.trim() || "Remote PC";
+      const host = document.getElementById("directHost").value.trim();
+      const port = document.getElementById("directPort").value.trim() || "8765";
+      const pin = document.getElementById("directPin").value.trim();
+
+      if (!host) {
+        showToast("⚠️ Enter an IP address or Tailscale IP");
+        return;
+      }
+
+      // Check if already in list, else add
+      let existing = savedPcs.find(p => p.host === host && p.port === port);
+      if (!existing) {
+        existing = { id: "pc_" + Date.now(), name: name, host: host, port: port, pin: pin };
+        savedPcs.push(existing);
+        saveComputersList(savedPcs);
+        renderHomePcList();
+      } else {
+        existing.pin = pin;
+        saveComputersList(savedPcs);
+      }
+
+      startConnection(existing);
+    };
+
+    // --- Verification PIN Modal Prompt ---
+    function promptForPin(pc, title, desc) {
+      const modal = document.getElementById("pinModal");
+      document.getElementById("pinModalTitle").innerText = title || "🔑 Enter Verification Code";
+      document.getElementById("pinModalDesc").innerText = desc || `Enter the 6-digit PIN displayed on ${pc.name}:`;
+      const input = document.getElementById("pinModalInput");
+      input.value = pc.pin || "";
+      modal.style.display = "flex";
+      setTimeout(() => input.focus(), 120);
+
+      document.getElementById("btnPinModalSubmit").onclick = () => {
+        const entered = input.value.trim();
+        if (entered) {
+          pc.pin = entered;
+          saveComputersList(savedPcs);
+          modal.style.display = "none";
+          startConnection(pc);
+        } else {
+          showToast("⚠️ PIN cannot be empty");
+        }
+      };
+
+      document.getElementById("btnPinModalCancel").onclick = () => {
+        modal.style.display = "none";
+      };
+    }
+
+    // --- WebSocket Connection Engine ---
+    function startConnection(pc) {
+      currentConnectingPc = pc;
+
+      // If no PIN has been set for this PC yet, prompt user directly!
+      if (!pc.pin) {
+        promptForPin(pc, "🔑 Enter Verification Code", `Enter the 6-digit PIN displayed on ${pc.name} to connect:`);
+        return;
+      }
+
+      showToast(`Connecting to ${pc.name}...`);
+
+      if (ws) {
+        try { ws.close(); } catch(e) {}
+      }
+
+      let host = pc.host;
+      if (host === "127.0.0.1" && window.location.hostname) {
+        host = window.location.hostname;
+      }
+      const port = pc.port || 8765;
+      const wsUrl = `ws://${host}:${port}/ws`;
+
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch(e) {
+        showToast(`❌ Connection Error: ${e.message}`);
+        return;
+      }
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        const isApp = window.AnyLocalAndroid !== undefined;
+        const isMobileDevice = isApp || /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent) || window.innerWidth < 768;
+        ws.send(JSON.stringify({
+          type: "auth",
+          pin: pc.pin || "",
+          client_type: isMobileDevice ? "mobile" : "desktop",
+          device_name: isApp ? "AnyLocal Android App" : (isMobileDevice ? "Mobile Phone" : "Desktop Browser")
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === "string") {
+          try {
+            const msg = JSON.parse(event.data);
+            handleJsonMessage(msg, pc);
+          } catch(e) {}
+        } else if (event.data instanceof ArrayBuffer) {
+          renderFrameOffscreen(event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        remoteStatusDot.style.background = "#ef4444";
+        remotePingVal.innerText = "Offline";
+        clearInterval(pingInterval);
+        showToast("Disconnected from remote PC.");
+      };
+
+      ws.onerror = () => {
+        showToast(`❌ Cannot connect to ${pc.host}:${port}. Ensure AnyLocal is running.`);
+      };
+    }
+
+    function handleJsonMessage(msg, pc) {
+      if (msg.type === "auth_ok") {
+        isAuthenticated = true;
+        // Switch to Remote View!
+        homeView.style.display = "none";
+        remoteView.style.display = "flex";
+
+        remotePcLabel.innerText = pc.name;
+        remoteStatusDot.style.background = "#22c55e";
+        remoteControlState.innerText = "🎮 Active";
+        remoteControlState.style.color = "#22c55e";
+
+        remoteWidth = msg.width || 1920;
+        remoteHeight = msg.height || 1080;
+        canvas.width = remoteWidth;
+        canvas.height = remoteHeight;
+
+        resetView();
+
+        pingInterval = setInterval(sendPing, 1500);
+        showToast(`Connected to ${pc.name}!`);
+      } else if (msg.type === "kicked") {
+        showToast(`⚠️ ${msg.reason || "Disconnected: Another device connected."}`, 6000);
+        exitToHome();
+        return;
+      } else if (msg.type === "auth_fail") {
+        const reason = msg.reason || "Invalid verification code.";
+        showToast(`⚠️ ${reason}`);
+        promptForPin(pc, "⚠️ Verification Failed", `${reason}\n\nEnter the current PIN shown on ${pc.name}:`);
+      } else if (msg.type === "control_state") {
+        isViewOnly = msg.is_view_only;
+        if (isViewOnly) {
+          remoteControlState.innerText = "👀 View-Only";
+          remoteControlState.style.color = "#f59e0b";
+          remoteStatusDot.style.background = "#f59e0b";
+          showToast("👀 View-Only: Local user is operating computer.");
+        } else {
+          remoteControlState.innerText = "🎮 Active";
+          remoteControlState.style.color = "#22c55e";
+          remoteStatusDot.style.background = "#22c55e";
+        }
+      } else if (msg.type === "pong") {
+        remotePingVal.innerText = `${Math.round(performance.now() - lastPingSent)}ms`;
+      }
+    }
+
+    function sendPing() {
+      if (ws && ws.readyState === WebSocket.OPEN && isAuthenticated) {
+        lastPingSent = performance.now();
+        ws.send(JSON.stringify({ type: "ping" }));
+      }
+    }
+
+    // --- Ultra-Low Latency Frame Renderer (Hardware Bitmap with Reliable Image Fallback) ---
+    async function renderFrameOffscreen(arrayBuffer) {
+      const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
+      let rendered = false;
+      try {
+        if (window.createImageBitmap) {
+          const bitmap = await createImageBitmap(blob);
+          if (ctx) ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          rendered = true;
+        }
+      } catch(e) {}
+
+      if (!rendered) {
+        const img = new Image();
+        img.onload = () => {
+          if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(img.src);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(blob);
+      }
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "ack" }));
+      }
+    }
+
+    // --- Viewport Zoom & Pan Engine ---
+    function updateCanvasTransform(smooth = false) {
+      if (smooth) {
+        canvas.style.transition = "transform 0.18s ease-out";
+      } else {
+        canvas.style.transition = "none";
+      }
+
+      if (zoomLevel <= 1.0) {
+        panX = 0;
+        panY = 0;
+        zoomLevel = 1.0;
+        canvas.style.transform = "none";
+        document.getElementById("btnResetView").style.display = "none";
+      } else {
+        const vp = viewport.getBoundingClientRect();
+        const baseW = canvas.offsetWidth || vp.width;
+        const baseH = canvas.offsetHeight || vp.height;
+        const scaledW = baseW * zoomLevel;
+        const scaledH = baseH * zoomLevel;
+
+        const minPanX = Math.min(0, vp.width - scaledW);
+        const maxPanX = Math.max(0, (vp.width - scaledW) / 2);
+        const minPanY = Math.min(0, vp.height - scaledH);
+        const maxPanY = Math.max(0, (vp.height - scaledH) / 2);
+
+        panX = Math.max(minPanX - 120, Math.min(120, panX));
+        panY = Math.max(minPanY - 120, Math.min(120, panY));
+
+        canvas.style.transformOrigin = "0 0";
+        canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+        document.getElementById("btnResetView").style.display = "flex";
+      }
+
+      document.getElementById("zoomLevelText").innerText = `${zoomLevel.toFixed(1)}x`;
+    }
+
+    function resetView() {
+      zoomLevel = 1.0;
+      panX = 0;
+      panY = 0;
+      updateCanvasTransform(true);
+      showToast("View: 1:1 Screen Fit");
+    }
+
+    // --- Magnifier Loupe for Small Buttons (Cancel, X, Checkboxes) ---
+    function showLoupe(clientX, clientY) {
+      if (!isLoupeEnabled || isViewOnly || isPanMode) return;
+      isLoupeActive = true;
+      loupeEl.style.display = "block";
+      updateLoupe(clientX, clientY);
+    }
+
+    function updateLoupe(clientX, clientY) {
+      if (!isLoupeActive) return;
+      const loupeY = Math.max(75, clientY - 75);
+      loupeEl.style.left = `${clientX}px`;
+      loupeEl.style.top = `${loupeY}px`;
+
+      const rect = canvas.getBoundingClientRect();
+      const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+      const canvasY = (clientY - rect.top) * (canvas.height / rect.height);
+
+      const patchSize = 54;
+      const sx = Math.max(0, Math.min(canvas.width - patchSize, canvasX - patchSize / 2));
+      const sy = Math.max(0, Math.min(canvas.height - patchSize, canvasY - patchSize / 2));
+
+      loupeCtx.imageSmoothingEnabled = false;
+      loupeCtx.clearRect(0, 0, 130, 130);
+      try {
+        loupeCtx.drawImage(canvas, sx, sy, patchSize, patchSize, 0, 0, 130, 130);
+      } catch(e) {}
+    }
+
+    function hideLoupe() {
+      if (isLoupeActive) {
+        isLoupeActive = false;
+        loupeEl.style.display = "none";
+      }
+    }
+
+    function getNormalizedCoords(pt) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = pt.clientX - rect.left;
+      const clientY = pt.clientY - rect.top;
+      const normX = Math.max(0, Math.min(1, clientX / rect.width));
+      const normY = Math.max(0, Math.min(1, clientY / rect.height));
+      return { normX, normY };
+    }
+
+    function sendWs(data) {
+      if (ws && ws.readyState === WebSocket.OPEN && isAuthenticated) {
+        ws.send(JSON.stringify(data));
+      }
+    }
+
+    function sendMouseClick(btn) {
+      if (isViewOnly) {
+        showToast("👀 View-Only: Local user active on PC.");
+        return;
+      }
+      sendWs({ type: "mouse", action: "click", btn: btn });
+    }
+
+    // --- Touch Event Handlers ---
+    viewport.addEventListener("touchstart", (e) => {
+      if (!isAuthenticated) return;
+
+      if (e.touches.length === 2) {
+        isPinching = true;
+        hideLoupe();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        initialPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        initialZoom = zoomLevel;
+        initialMidX = (t1.clientX + t2.clientX) / 2;
+        initialMidY = (t1.clientY + t2.clientY) / 2;
+        initialPanX = panX;
+        initialPanY = panY;
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        isPinching = false;
+        const t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+        lastTouchX = t.clientX;
+        lastTouchY = t.clientY;
+        touchStartTime = performance.now();
+        hasMoved = false;
+
+        if (isPanMode) return;
+
+        if (isLoupeEnabled && !isViewOnly) {
+          showLoupe(t.clientX, t.clientY);
+        }
+      }
+    }, { passive: false });
+
+    viewport.addEventListener("touchmove", (e) => {
+      if (!isAuthenticated) return;
+      e.preventDefault();
+
+      if (e.touches.length === 2 && isPinching) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        if (initialPinchDist > 10) {
+          zoomLevel = Math.max(1.0, Math.min(3.5, initialZoom * (currDist / initialPinchDist)));
+        }
+        const currMidX = (t1.clientX + t2.clientX) / 2;
+        const currMidY = (t1.clientY + t2.clientY) / 2;
+        panX = initialPanX + (currMidX - initialMidX);
+        panY = initialPanY + (currMidY - initialMidY);
+        updateCanvasTransform(false);
+        return;
+      }
+
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        const dx = t.clientX - lastTouchX;
+        const dy = t.clientY - lastTouchY;
+
+        if (Math.hypot(t.clientX - touchStartX, t.clientY - touchStartY) > 18) {
+          hasMoved = true;
+        }
+
+        if (isPanMode) {
+          panX += dx;
+          panY += dy;
+          updateCanvasTransform(false);
+          lastTouchX = t.clientX;
+          lastTouchY = t.clientY;
+          return;
+        }
+
+        if (!isViewOnly) {
+          if (isLoupeActive) {
+            updateLoupe(t.clientX, t.clientY);
+          }
+
+          const { normX, normY } = getNormalizedCoords(t);
+          sendWs({
+            type: "mouse",
+            action: "move",
+            x: normX,
+            y: normY
+          });
+
+          // Edge Auto-Pan when zoomed in
+          if (zoomLevel > 1.0) {
+            const vp = viewport.getBoundingClientRect();
+            const threshold = 40;
+            if (t.clientX < vp.left + threshold) panX += 14;
+            else if (t.clientX > vp.right - threshold) panX -= 14;
+            if (t.clientY < vp.top + threshold) panY += 14;
+            else if (t.clientY > vp.bottom - threshold) panY -= 14;
+            updateCanvasTransform(false);
+          }
+        }
+
+        lastTouchX = t.clientX;
+        lastTouchY = t.clientY;
+      }
+    }, { passive: false });
+
+    viewport.addEventListener("touchend", (e) => {
+      if (!isAuthenticated) return;
+      if (isPinching) {
+        isPinching = false;
+        updateCanvasTransform(true);
+        return;
+      }
+
+      const duration = performance.now() - touchStartTime;
+
+      if (isPanMode) return;
+
+      if (isViewOnly) {
+        hideLoupe();
+        if (!hasMoved && duration < 300) {
+          showToast("👀 View-Only: Someone is operating this PC locally.");
+        }
+        return;
+      }
+
+      // Natural finger tap on mobile (or slight micro-jitter < 18px)
+      if (!hasMoved && duration < 400) {
+        const { normX, normY } = getNormalizedCoords({ clientX: touchStartX, clientY: touchStartY });
+        sendWs({ type: "mouse", action: "click", btn: "left", x: normX, y: normY });
+      } else if (isLoupeActive && hasMoved) {
+        // Targeted release on crosshair for tiny buttons (like Delete Row dialog 'Yes')
+        const { normX, normY } = getNormalizedCoords({ clientX: lastTouchX, clientY: lastTouchY });
+        sendWs({ type: "mouse", action: "click", btn: "left", x: normX, y: normY });
+        showToast("🎯 Clicked at crosshair!");
+      } else if (!hasMoved && duration >= 500) {
+        sendMouseClick("right");
+        showToast("Right Click");
+      }
+
+      hideLoupe();
+    });
+
+    // Right-Edge Scroll Strip
+    let scrollStartY = 0;
+    scrollStrip.addEventListener("touchstart", (e) => {
+      if (e.touches.length > 0) scrollStartY = e.touches[0].clientY;
+    });
+    scrollStrip.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      if (e.touches.length > 0) {
+        const curY = e.touches[0].clientY;
+        const diff = curY - scrollStartY;
+        if (Math.abs(diff) > 15) {
+          const delta = diff < 0 ? 1 : -1;
+          sendWs({ type: "mouse", action: "wheel", delta: delta });
+          scrollStartY = curY;
+        }
+      }
+    }, { passive: false });
+
+    // --- Dock Controls ---
+    document.getElementById("btnResetView").onclick = resetView;
+
+    document.getElementById("dockWake").onclick = () => {
+      sendWs({ type: "shortcut", combo: "wake_unlock" });
+      showToast("⚡ Waking Screen & Opening Sign-In...");
+    };
+
+    document.getElementById("dockPanToggle").onclick = () => {
+      isPanMode = !isPanMode;
+      const btn = document.getElementById("dockPanToggle");
+      if (isPanMode) {
+        btn.classList.add("active");
+        btn.innerHTML = "✋ Panning";
+        hideLoupe();
+        showToast("Pan Mode ON: Drag 1 finger to shift screen left/right");
+      } else {
+        btn.classList.remove("active");
+        btn.innerHTML = "✋ Pan";
+        showToast("Control Mode ON: Tap to control PC");
+      }
+    };
+
+    document.getElementById("dockLoupeToggle").onclick = () => {
+      isLoupeEnabled = !isLoupeEnabled;
+      const btn = document.getElementById("dockLoupeToggle");
+      if (isLoupeEnabled) {
+        btn.classList.add("active");
+        showToast("Loupe ON: Press & drag to aim at small buttons");
+      } else {
+        btn.classList.remove("active");
+        hideLoupe();
+        showToast("Loupe OFF");
+      }
+    };
+
+    // Quick Keys in Dock
+    const dockEnter = document.getElementById("dockEnterKey");
+    if (dockEnter) {
+      dockEnter.onclick = () => {
+        if (isViewOnly) return showToast("👀 View-Only: Local user active.");
+        sendWs({ type: "shortcut", combo: "enter" });
+        showToast("⏎ Enter Key Sent");
+      };
+    }
+
+    const dockTab = document.getElementById("dockTabKey");
+    if (dockTab) {
+      dockTab.onclick = () => {
+        if (isViewOnly) return showToast("👀 View-Only: Local user active.");
+        sendWs({ type: "shortcut", combo: "tab" });
+        showToast("⇥ Next Field (Tab)");
+      };
+    }
+
+    const dockEsc = document.getElementById("dockEsc");
+    if (dockEsc) {
+      dockEsc.onclick = () => {
+        if (isViewOnly) return showToast("👀 View-Only: Local user active.");
+        sendWs({ type: "shortcut", combo: "esc" });
+        showToast("❌ Esc / Cancel sent");
+      };
+    }
+
+    const dockAlerts = document.getElementById("dockAlertsBtn");
+    if (dockAlerts) {
+      dockAlerts.onclick = () => {
+        exitToHome();
+        tabSecurityAlerts.click();
+      };
+    }
+
+    document.getElementById("dockZoom").onclick = () => {
+      if (zoomLevel === 1.0) zoomLevel = 1.8;
+      else if (zoomLevel < 2.5) zoomLevel = 2.6;
+      else zoomLevel = 1.0;
+      updateCanvasTransform(true);
+      showToast(`Zoom: ${zoomLevel.toFixed(1)}x`);
+    };
+
+    // Keyboard Drawer
+    document.getElementById("dockKeyboard").onclick = () => {
+      textDrawer.style.display = "flex";
+      textInput.focus();
+    };
+    document.getElementById("btnCloseText").onclick = () => {
+      textDrawer.style.display = "none";
+    };
+
+    function sendMobileText() {
+      if (isViewOnly) {
+        showToast("👀 View-Only: Local user active on PC.");
+        return;
+      }
+      const val = textInput.value;
+      if (val) {
+        sendWs({ type: "text", text: val });
+        textInput.value = "";
+        showToast("Text Sent to PC");
+      }
+    }
+    document.getElementById("btnSendText").onclick = sendMobileText;
+    textInput.addEventListener("keyup", (e) => {
+      if (e.key === "Enter") sendMobileText();
+    });
+
+    document.querySelectorAll(".key-chip").forEach(chip => {
+      chip.onclick = () => {
+        const key = chip.getAttribute("data-key");
+        const combo = chip.getAttribute("data-combo");
+        if (key) sendWs({ type: "shortcut", combo: key });
+        else if (combo) sendWs({ type: "shortcut", combo: combo });
+      };
+    });
+
+    // Shortcuts Sheet
+    document.getElementById("dockMore").onclick = () => {
+      shortcutsSheet.style.display = "flex";
+    };
+    document.getElementById("btnCloseSheet").onclick = () => {
+      shortcutsSheet.style.display = "none";
+    };
+
+    document.querySelectorAll(".sheet-btn[data-combo]").forEach(btn => {
+      btn.onclick = () => {
+        const combo = btn.getAttribute("data-combo");
+        sendWs({ type: "shortcut", combo: combo });
+        shortcutsSheet.style.display = "none";
+        showToast(`Sent: ${combo}`);
+      };
+    });
+
+    document.getElementById("btnFsToggle").onclick = () => {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+      shortcutsSheet.style.display = "none";
+    };
+
+    document.getElementById("btnQualityToggle").onclick = () => {
+      currentQuality = currentQuality === 65 ? 85 : (currentQuality === 85 ? 50 : 65);
+      document.getElementById("lblQuality").innerText = `Quality: ${currentQuality}%`;
+      sendWs({ type: "config", quality: currentQuality });
+      showToast(`Quality: ${currentQuality}%`);
+    };
+
+    document.getElementById("btnSwitchPcSheet").onclick = () => {
+      shortcutsSheet.style.display = "none";
+      exitToHome();
+    };
+
+    document.getElementById("islandSwitchBtn").onclick = () => {
+      exitToHome();
+    };
+
+    document.getElementById("btnDisconnect").onclick = () => {
+      exitToHome();
+    };
+
+    function exitToHome() {
+      if (ws) {
+        try { ws.close(); } catch(e) {}
+      }
+      remoteView.style.display = "none";
+      homeView.style.display = "flex";
+      renderHomePcList();
+    }
+
+    // Precision Nudge Buttons
+    document.getElementById("nudgeUp").onclick = () => sendWs({ type: "mouse", action: "rel_move", dx: 0, dy: -2 });
+    document.getElementById("nudgeDown").onclick = () => sendWs({ type: "mouse", action: "rel_move", dx: 0, dy: 2 });
+    document.getElementById("nudgeLeft").onclick = () => sendWs({ type: "mouse", action: "rel_move", dx: -2, dy: 0 });
+    document.getElementById("nudgeRight").onclick = () => sendWs({ type: "mouse", action: "rel_move", dx: 2, dy: 0 });
+    document.getElementById("nudgeClick").onclick = () => sendMouseClick("left");
+
+    // --- QR Scanner Implementation ---
+    document.getElementById("btnOpenScan").onclick = () => {
+      qrScannerModal.style.display = "flex";
+      startQrCamera();
+    };
+    document.getElementById("btnCloseQr").onclick = () => {
+      stopQrCamera();
+      qrScannerModal.style.display = "none";
+    };
+
+    async function startQrCamera() {
+      try {
+        activeCameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        cameraVideo.srcObject = activeCameraStream;
+
+        // Use native Android BarcodeDetector if supported
+        if ('BarcodeDetector' in window) {
+          const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+          qrScanInterval = setInterval(async () => {
+            try {
+              const barcodes = await barcodeDetector.detect(cameraVideo);
+              if (barcodes.length > 0) {
+                const rawVal = barcodes[0].rawValue;
+                handleQrPayload(rawVal);
+              }
+            } catch(e) {}
+          }, 400);
+        } else {
+          showToast("Camera active. Point at Host QR.");
+        }
+      } catch(e) {
+        showToast("Camera permission needed for QR scanning.");
+      }
+    }
+
+    function stopQrCamera() {
+      if (qrScanInterval) clearInterval(qrScanInterval);
+      if (activeCameraStream) {
+        activeCameraStream.getTracks().forEach(t => t.stop());
+        activeCameraStream = null;
+      }
+    }
+
+    function handleQrPayload(urlStr) {
+      stopQrCamera();
+      qrScannerModal.style.display = "none";
+      try {
+        const url = new URL(urlStr);
+        const host = url.hostname;
+        const port = url.port || "8765";
+        const pin = url.hash.replace("#", "");
+
+        let existing = savedPcs.find(p => p.host === host && p.port === port);
+        if (!existing) {
+          existing = { id: "pc_" + Date.now(), name: `Scanned PC (${host})`, host: host, port: port, pin: pin };
+          savedPcs.push(existing);
+          saveComputersList(savedPcs);
+          renderHomePcList();
+        } else {
+          existing.pin = pin;
+          saveComputersList(savedPcs);
+        }
+        startConnection(existing);
+      } catch(e) {
+        showToast("Invalid QR Code payload.");
+      }
+    }
+
+    document.getElementById("btnHelp").onclick = () => {
+      alert("🌐 Remote Access Tips:\n\n1. If you are away from home, install Tailscale on your shop computer and phone.\n2. In Tailscale, check the shop computer's IP (starts with 100.x.y.z).\n3. In AnyLocal, tap 'Direct Connect', enter the 100.x.y.z IP and PIN, and tap Connect!\n\nIt connects directly over encrypted WireGuard with zero fees!");
+    };
+
+    // --- Cloud Server & App Update Modal Handlers ---
+    const serverSettingsModal = document.getElementById("serverSettingsModal");
+    const cfgCloudUrl = document.getElementById("cfgCloudUrl");
+    const btnCloseSettingsModal = document.getElementById("btnCloseSettingsModal");
+    const btnSaveCloudUrl = document.getElementById("btnSaveCloudUrl");
+    const btnCheckAppUpdate = document.getElementById("btnCheckAppUpdate");
+    const appUpdateStatus = document.getElementById("appUpdateStatus");
+    const btnDownloadNewApk = document.getElementById("btnDownloadNewApk");
+
+    document.getElementById("btnServerSettings").onclick = () => {
+      cfgCloudUrl.value = localStorage.getItem("cloud_relay_url") || "https://anylocal-relay.onrender.com";
+      serverSettingsModal.style.display = "flex";
+    };
+
+    btnCloseSettingsModal.onclick = () => {
+      serverSettingsModal.style.display = "none";
+    };
+
+    btnSaveCloudUrl.onclick = () => {
+      const url = cfgCloudUrl.value.trim().replace(/\/+$/, "");
+      if (url) {
+        localStorage.setItem("cloud_relay_url", url);
+        showToast("💾 Cloud Server URL Saved");
+      }
+    };
+
+    btnCheckAppUpdate.onclick = async () => {
+      const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "https://anylocal-relay.onrender.com").replace(/\/+$/, "");
+      appUpdateStatus.innerHTML = `<span style="color:#38bdf8;">Connecting to ${targetUrl}/api/version...</span>`;
+      try {
+        const res = await fetch(`${targetUrl}/api/version`);
+        if (res.ok) {
+          const data = await res.json();
+          const remoteVer = data.version || "2.4.0";
+          if (remoteVer !== "2.4.0") {
+            appUpdateStatus.innerHTML = `
+              <div style="color:#facc15; font-weight:700; margin-bottom:6px;">🎉 New Update Available: v${remoteVer}!</div>
+              <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">• ${(data.changelog || []).join('<br>• ')}</div>
+            `;
+            const apkLink = `${targetUrl}/download/AnyLocal.apk`;
+            btnDownloadNewApk.href = apkLink;
+            btnDownloadNewApk.style.display = "block";
+          } else {
+            appUpdateStatus.innerHTML = `<span style="color:#22c55e; font-weight:700;">✅ You are running the latest version (v2.4.0)!</span>`;
+            btnDownloadNewApk.style.display = "none";
+          }
+        } else {
+          appUpdateStatus.innerHTML = `<span style="color:#f87171;">⚠️ Server returned HTTP ${res.status}.</span>`;
+        }
+      } catch (err) {
+        appUpdateStatus.innerHTML = `<span style="color:#f87171;">⚠️ Could not connect to Render server at ${targetUrl}.<br>Error: ${err.message}</span>`;
+      }
+    };
+
+    // Initial Render
+    renderHomePcList();
+  </script>
+</body>
+</html>
