@@ -48,6 +48,7 @@ def init_db():
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pc_id ON alerts(pc_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON alerts(created_timestamp);")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_dedup ON alerts(pc_id, event_type, created_timestamp);")
     conn.commit()
     conn.close()
 
@@ -66,22 +67,18 @@ def cleanup_expired_alerts():
     except Exception as e:
         print(f"[Cleanup Error] {e}")
 
+async def handle_options(request):
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS, DELETE",
+        "Access-Control-Allow-Headers": "*"
+    }
+    return web.Response(status=200, headers=headers)
+
 async def handle_post_alert(request):
     """
-    Ingests an alert from PC A or PC B.
-    Body: {
-        "pc_id": "PC_A",
-        "pc_name": "Counter 1 - Lugda Bazar",
-        "event_type": "BILL_PRINTED" | "SALES_LIST_OPENED" | "BILL_OPENED" | "ITEM_DELETED" | "BILL_DELETED" | "DISCOUNT_APPLIED",
-        "title": "Bill Printed",
-        "details": "Bill #20-52828 with 4 items",
-        "bill_no": "20-52828",
-        "amount": 2100.0,
-        "discount": 0.0,
-        "item_count": 4,
-        "barcode": "118076",
-        "severity": "danger" | "warning" | "info" | "success"
-    }
+    Ingests an alert from any shop computer.
+    Preserves original event timestamp even if synced later from offline queue.
     """
     try:
         data = await request.json()
@@ -98,14 +95,15 @@ async def handle_post_alert(request):
         severity = str(data.get("severity", "info")).strip()
 
         now = time.time()
-        created_at = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
+        created_timestamp = float(data.get("created_timestamp", now))
+        created_at = str(data.get("created_at", datetime.fromtimestamp(created_timestamp).strftime("%Y-%m-%d %H:%M:%S"))).strip()
 
         cleanup_expired_alerts()
 
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO alerts (
+            INSERT OR IGNORE INTO alerts (
                 pc_id, pc_name, event_type, title, details, bill_no,
                 amount, discount, item_count, barcode, severity,
                 created_at, created_timestamp
@@ -113,7 +111,7 @@ async def handle_post_alert(request):
         """, (
             pc_id, pc_name, event_type, title, details, bill_no,
             amount, discount, item_count, barcode, severity,
-            created_at, now
+            created_at, created_timestamp
         ))
         conn.commit()
         alert_id = cur.lastrowid
@@ -121,7 +119,7 @@ async def handle_post_alert(request):
 
         print(f"[Alert] Stored alert #{alert_id} from {pc_id} ({event_type}): {title}")
 
-        # Broadcast real-time push alert to all 4-5 connected phone APKs
+        # Broadcast real-time push alert to all connected phone APKs
         alert_payload = {
             "id": alert_id,
             "pc_id": pc_id,
@@ -136,7 +134,7 @@ async def handle_post_alert(request):
             "barcode": barcode,
             "severity": severity,
             "created_at": created_at,
-            "created_timestamp": now
+            "created_timestamp": created_timestamp
         }
         b_msg = json.dumps({"type": "security_alert", "alert": alert_payload})
         for entry in relays.values():
@@ -147,33 +145,35 @@ async def handle_post_alert(request):
                     except Exception:
                         pass
 
-        return web.json_response({"status": "ok", "alert_id": alert_id})
+        resp_headers = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*"}
+        return web.json_response({"status": "ok", "alert_id": alert_id}, headers=resp_headers)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=400)
+        resp_headers = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*"}
+        return web.json_response({"error": str(e)}, status=400, headers=resp_headers)
 
 async def handle_get_alerts(request):
     """
     Returns alerts stored for phone APK.
     Strictly isolated: Phone APK fetches this; desktop has no view.
     Query params:
-    - pc_id: Filter by PC (e.g. 'PC_A' or 'all')
-    - limit: default 100
+    - pc_id: Filter by PC ID or PC Name (e.g. 'Bhuj' or 'all')
+    - limit: default 200
     """
     cleanup_expired_alerts()
-    pc_id = request.query.get("pc_id", "all")
-    limit = int(request.query.get("limit", 100))
+    pc_id = request.query.get("pc_id", "all").strip()
+    limit = int(request.query.get("limit", 200))
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    if pc_id and pc_id != "all":
+    if pc_id and pc_id.lower() != "all":
         cur.execute("""
             SELECT * FROM alerts 
-            WHERE pc_id = ? 
+            WHERE LOWER(pc_id) = LOWER(?) OR LOWER(pc_name) = LOWER(?) OR LOWER(pc_name) LIKE LOWER(?)
             ORDER BY created_timestamp DESC 
             LIMIT ?
-        """, (pc_id, limit))
+        """, (pc_id, pc_id, f"%{pc_id}%", limit))
     else:
         cur.execute("""
             SELECT * FROM alerts 
@@ -185,11 +185,16 @@ async def handle_get_alerts(request):
     alerts = [dict(r) for r in rows]
     conn.close()
 
+    resp_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Cache-Control": "no-cache"
+    }
     return web.json_response({
         "status": "ok",
         "count": len(alerts),
         "alerts": alerts
-    })
+    }, headers=resp_headers)
 
 async def handle_get_pcs(request):
     """Lists all monitored computers with alert counts."""
@@ -211,9 +216,16 @@ async def handle_get_pcs(request):
             "pc_id": r[0],
             "pc_name": r[1],
             "total_alerts": r[2],
+            "last_timestamp": r[3],
             "last_activity": r[4]
         })
-    return web.json_response({"status": "ok", "pcs": pcs})
+
+    resp_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Cache-Control": "no-cache"
+    }
+    return web.json_response({"status": "ok", "pcs": pcs}, headers=resp_headers)
 
 async def handle_cleanup(request):
     cleanup_expired_alerts()
@@ -327,7 +339,9 @@ def create_app():
     app.router.add_get("/download/AnyLocal.apk", handle_download_apk)
     app.router.add_post("/api/alerts", handle_post_alert)
     app.router.add_get("/api/alerts", handle_get_alerts)
+    app.router.add_route("OPTIONS", "/api/alerts", handle_options)
     app.router.add_get("/api/pcs", handle_get_pcs)
+    app.router.add_route("OPTIONS", "/api/pcs", handle_options)
     app.router.add_delete("/api/alerts/cleanup", handle_cleanup)
     app.router.add_get("/ws/relay", ws_relay_handler)
 

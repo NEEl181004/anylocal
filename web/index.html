@@ -907,11 +907,9 @@
             Auditing Quick Software billing events. Data is strictly private to your phone & auto-purges after 3 days.
           </div>
 
-          <!-- PC Selector Pills -->
+          <!-- PC Selector Pills (Dynamically populated from discovered & saved PCs) -->
           <div class="pc-filter-bar" id="pcFilterBar">
             <button class="pc-filter-btn active" data-filter="all">All PCs</button>
-            <button class="pc-filter-btn" data-filter="PC-A">🖥️ PC A</button>
-            <button class="pc-filter-btn" data-filter="PC-B">🖥️ PC B</button>
           </div>
 
           <!-- Summary Metrics -->
@@ -1258,6 +1256,9 @@
           }
         };
       });
+      if (typeof renderPcFilterBar === "function") {
+        renderPcFilterBar();
+      }
     }
 
     // --- Toast Notifications ---
@@ -1321,39 +1322,107 @@
       }
     }
 
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str).replace(/[&<>"']/g, m => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[m]));
+    }
+
+    function renderPcFilterBar() {
+      const bar = document.getElementById("pcFilterBar");
+      if (!bar) return;
+
+      const pcNames = new Set();
+      // 1. Discovered from Render Cloud DB (any PC that has ever logged an alert)
+      cachedAlerts.forEach(a => {
+        const name = (a.pc_name || a.pc_id || "").trim();
+        if (name) pcNames.add(name);
+      });
+      // 2. Saved shop branches in phone address book (e.g. Bhuj, Mandvi)
+      (savedPcs || []).forEach(p => {
+        const name = (p.name || "").trim();
+        if (name) pcNames.add(name);
+      });
+
+      let html = `<button class="pc-filter-btn ${currentAlertFilter === 'all' ? 'active' : ''}" data-filter="all">All PCs</button>`;
+      pcNames.forEach(name => {
+        const isActive = (currentAlertFilter.toLowerCase() === name.toLowerCase());
+        html += `<button class="pc-filter-btn ${isActive ? 'active' : ''}" data-filter="${escapeHtml(name)}">🏢 ${escapeHtml(name)}</button>`;
+      });
+
+      bar.innerHTML = html;
+
+      // Bind dynamic pill click listeners
+      bar.querySelectorAll(".pc-filter-btn").forEach(btn => {
+        btn.onclick = () => {
+          bar.querySelectorAll(".pc-filter-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          currentAlertFilter = btn.getAttribute("data-filter");
+          renderAlertsList();
+        };
+      });
+    }
+
     async function fetchSecurityAlerts() {
-      const cloudUrl = (localStorage.getItem("cloud_relay_url") || "").trim().replace(/\/+$/, "");
-      let url = "";
-      if (cloudUrl) {
-        url = `${cloudUrl}/api/alerts?pc_id=${currentAlertFilter}`;
-      } else {
-        const activeHost = currentConnectingPc ? currentConnectingPc.host : (window.location.hostname || "127.0.0.1");
-        const activePort = currentConnectingPc ? currentConnectingPc.port : (window.location.port || "8765");
-        url = `http://${activeHost}:${activePort}/api/alerts?pc_id=${currentAlertFilter}`;
-      }
+      const cloudUrl = (localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").trim().replace(/\/+$/, "");
+      let dataFetched = false;
+
+      // 1. Fetch from Render Cloud DB (central 24/7 database)
       try {
-        const res = await fetch(url);
+        const res = await fetch(`${cloudUrl}/api/alerts?pc_id=all&limit=250`);
         if (res.ok) {
           const data = await res.json();
-          if (data.alerts) {
+          if (data && Array.isArray(data.alerts)) {
             cachedAlerts = data.alerts;
-            renderAlertsList();
+            dataFetched = true;
           }
         }
       } catch(e) {
-        console.warn("Could not fetch alerts:", e);
+        console.warn("Render cloud alerts fetch error:", e);
       }
+
+      // 2. Fallback to direct local PC if Render is down or phone is offline
+      if (!dataFetched) {
+        const activeHost = currentConnectingPc ? currentConnectingPc.host : (savedPcs.length > 0 ? savedPcs[0].host : (window.location.hostname || ""));
+        const activePort = currentConnectingPc ? currentConnectingPc.port : (savedPcs.length > 0 ? savedPcs[0].port : (window.location.port || "8765"));
+        if (activeHost && activeHost !== "localhost" && activeHost !== "127.0.0.1") {
+          try {
+            const locRes = await fetch(`http://${activeHost}:${activePort}/api/alerts?pc_id=all&limit=150`);
+            if (locRes.ok) {
+              const locData = await locRes.json();
+              if (locData && Array.isArray(locData.alerts)) {
+                cachedAlerts = locData.alerts;
+                dataFetched = true;
+              }
+            }
+          } catch(e) {}
+        }
+      }
+
+      renderPcFilterBar();
+      renderAlertsList();
     }
 
     function renderAlertsList() {
       if (!alertsFeedContainer) return;
-      const filtered = currentAlertFilter === "all" 
-        ? cachedAlerts 
-        : cachedAlerts.filter(a => a.pc_id === currentAlertFilter);
+      const filter = (currentAlertFilter || "all").trim().toLowerCase();
 
-      // Update metrics
+      const filtered = filter === "all"
+        ? cachedAlerts
+        : cachedAlerts.filter(a => {
+            const pcName = (a.pc_name || "").toLowerCase();
+            const pcId = (a.pc_id || "").toLowerCase();
+            return pcName === filter || pcId === filter || pcName.includes(filter) || filter.includes(pcName);
+          });
+
+      // Update metrics specifically for current filter
       let printed = 0, itemDel = 0, discounts = 0, billDel = 0;
-      cachedAlerts.forEach(a => {
+      filtered.forEach(a => {
         if (a.event_type === "BILL_PRINTED") printed++;
         else if (a.event_type === "ITEM_DELETED") itemDel++;
         else if (a.event_type === "DISCOUNT_APPLIED") discounts++;
@@ -1367,7 +1436,7 @@
       if (filtered.length === 0) {
         alertsFeedContainer.innerHTML = `
           <div style="text-align:center; padding:35px 10px; color:#64748b; font-size:12px;">
-            No alerts recorded for ${currentAlertFilter === 'all' ? 'any PC' : currentAlertFilter} in the last 3 days.<br>
+            No alerts recorded for ${currentAlertFilter === 'all' ? 'any PC' : escapeHtml(currentAlertFilter)} in the last 3 days.<br>
             <span style="font-size:10px; color:#475569;">Quick Software actions will log here in real time.</span>
           </div>`;
         return;
@@ -1379,13 +1448,13 @@
         return `
           <div class="alert-feed-card ${severityClass}">
             <div class="alert-header">
-              <span class="alert-badge ${badgeClass}">${(a.event_type || 'ALERT').replace(/_/g, ' ')}</span>
-              <span class="alert-pc-tag">🖥️ ${a.pc_name || a.pc_id}</span>
+              <span class="alert-badge ${badgeClass}">${escapeHtml((a.event_type || 'ALERT').replace(/_/g, ' '))}</span>
+              <span class="alert-pc-tag">🏢 ${escapeHtml(a.pc_name || a.pc_id)}</span>
             </div>
-            <div class="alert-title">${a.title}</div>
-            <div class="alert-details">${a.details}</div>
+            <div class="alert-title">${escapeHtml(a.title)}</div>
+            <div class="alert-details">${escapeHtml(a.details)}</div>
             <div class="alert-meta">
-              <span>🕒 ${a.created_at}</span>
+              <span>🕒 ${escapeHtml(a.created_at)}</span>
               ${a.amount > 0 ? `<span style="font-weight:700; color:#38bdf8;">Amount: ₹${a.amount.toFixed(2)}</span>` : ''}
               ${a.discount > 0 ? `<span style="font-weight:700; color:#f59e0b;">Discount: -₹${a.discount.toFixed(2)}</span>` : ''}
             </div>
@@ -1393,16 +1462,6 @@
         `;
       }).join('');
     }
-
-    // Filter pill clicks
-    document.querySelectorAll(".pc-filter-btn").forEach(btn => {
-      btn.onclick = () => {
-        document.querySelectorAll(".pc-filter-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        currentAlertFilter = btn.getAttribute("data-filter");
-        renderAlertsList();
-      };
-    });
 
     document.getElementById("btnRefreshAlerts").onclick = () => {
       fetchSecurityAlerts();
@@ -1413,6 +1472,7 @@
       cachedAlerts.unshift(alert);
       unreadAlertsCount++;
       updateBadgeUI();
+      renderPcFilterBar();
       renderAlertsList();
       showToast(`🚨 ALERT: ${alert.title}`);
       if (navigator.vibrate) {
@@ -2197,6 +2257,8 @@
 
     // Initial Render
     renderHomePcList();
+    renderPcFilterBar();
+    fetchSecurityAlerts();
   </script>
 </body>
 </html>

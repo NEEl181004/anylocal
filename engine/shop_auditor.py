@@ -20,6 +20,7 @@ import sys
 import time
 import json
 import socket
+import sqlite3
 import threading
 import urllib.request
 import urllib.error
@@ -44,11 +45,46 @@ except Exception:
 
 
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".anylocal_config.json")
+OFFLINE_DB_PATH = os.path.join(os.path.expanduser("~"), ".anylocal_alerts_offline.db")
+
+
+def init_offline_db():
+    """Initializes local SQLite database to store alerts offline when network/Render is down."""
+    try:
+        conn = sqlite3.connect(OFFLINE_DB_PATH)
+        cur = conn.cursor()
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS offline_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pc_id TEXT NOT NULL,
+            pc_name TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            details TEXT NOT NULL,
+            bill_no TEXT,
+            amount REAL DEFAULT 0.0,
+            discount REAL DEFAULT 0.0,
+            item_count INTEGER DEFAULT 0,
+            barcode TEXT,
+            severity TEXT DEFAULT 'info',
+            created_at TEXT NOT NULL,
+            created_timestamp REAL NOT NULL,
+            synced INTEGER DEFAULT 0
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_offline_synced ON offline_alerts(synced);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_offline_timestamp ON offline_alerts(created_timestamp);")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[Auditor DB] Offline DB init error: {e}")
+
 
 def get_auditor_config():
+    hostname = socket.gethostname().upper()
     cfg = {
-        "pc_id": socket.gethostname().upper(),
-        "pc_name": f"Counter ({socket.gethostname()})",
+        "pc_id": hostname,
+        "pc_name": f"Counter ({hostname})",
         "cloud_server_url": "https://anylocal.onrender.com",
         "local_server_port": 8765,
         "poll_interval": 1.0,
@@ -60,11 +96,11 @@ def get_auditor_config():
                 saved = json.load(f)
                 if "auditor" in saved:
                     cfg.update(saved["auditor"])
-                if "pc_id" in saved:
+                if "pc_id" in saved and saved["pc_id"]:
                     cfg["pc_id"] = saved["pc_id"]
-                if "pc_name" in saved:
+                if "pc_name" in saved and saved["pc_name"]:
                     cfg["pc_name"] = saved["pc_name"]
-                if "cloud_server_url" in saved:
+                if "cloud_server_url" in saved and saved["cloud_server_url"]:
                     cfg["cloud_server_url"] = saved["cloud_server_url"]
         except Exception:
             pass
@@ -81,6 +117,11 @@ class ShopAuditor:
 
         self.is_running = False
         self.thread = None
+        self.sync_thread = None
+        self._sync_event = threading.Event()
+
+        # Initialize offline SQLite database
+        init_offline_db()
 
         # Tracking state to prevent duplicate triggers
         self.last_active_window_title = ""
@@ -99,6 +140,13 @@ class ShopAuditor:
         self.delete_dialog_active = False
         self.last_discount_alert_voucher = ""
 
+    def refresh_identity(self):
+        """Reloads PC name and config from ~/.anylocal_config.json dynamically."""
+        self.config = get_auditor_config()
+        self.pc_id = self.config.get("pc_id", socket.gethostname().upper())
+        self.pc_name = self.config.get("pc_name", f"Counter ({self.pc_id})")
+        self.cloud_server_url = self.config.get("cloud_server_url", "https://anylocal.onrender.com")
+
     def start(self):
         if not WIN32_AVAILABLE:
             print("[Auditor] Win32 libraries not available, auditor disabled.")
@@ -106,19 +154,30 @@ class ShopAuditor:
         if self.is_running:
             return
         self.is_running = True
+        self.refresh_identity()
+
+        # 1. Background sync worker: automatically flushes local offline queue to Render
+        self.sync_thread = threading.Thread(target=self._sync_worker, daemon=True)
+        self.sync_thread.start()
+
+        # 2. Background UI monitoring loop
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.thread.start()
-        print(f"[Auditor] Shop Security Auditor started for {self.pc_id} ({self.pc_name}).")
+        print(f"[Auditor] Shop Security Auditor active for {self.pc_id} ({self.pc_name}). Monitoring Quick Software...")
 
     def stop(self):
         self.is_running = False
+        if self._sync_event:
+            self._sync_event.set()
 
     def emit_alert(self, event_type, title, details, bill_no="", amount=0.0, discount=0.0, item_count=0, barcode="", severity="info"):
         """
-        Emits a security alert to:
-        1. Cloud Server database via HTTP POST.
-        2. Connected phone APK via live WebSocket callback.
+        Emits a security alert:
+        1. Persists immediately into local offline SQLite DB (guaranteeing zero data loss even if internet/Render/Tailscale is down).
+        2. Dispatches to connected phone APK if active via WebSocket.
+        3. Wakes sync worker to push queued alerts to Render Cloud DB.
         """
+        self.refresh_identity()
         now = time.time()
         created_at = datetime.fromtimestamp(now).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -138,35 +197,121 @@ class ShopAuditor:
             "created_timestamp": now
         }
 
-        # 1. Local WebSocket callback (instant transmission to connected phone APK)
+        # 1. Local Offline SQLite storage (always preserved locally)
+        try:
+            conn = sqlite3.connect(OFFLINE_DB_PATH)
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO offline_alerts (
+                    pc_id, pc_name, event_type, title, details, bill_no,
+                    amount, discount, item_count, barcode, severity,
+                    created_at, created_timestamp, synced
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, (
+                self.pc_id, self.pc_name, event_type, title, details, str(bill_no),
+                float(amount), float(discount), int(item_count), str(barcode), severity,
+                created_at, now
+            ))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"[Auditor DB] Failed to save offline alert: {e}")
+
+        # 2. Local WebSocket callback (instant transmission to connected phone APK)
         if self.on_alert_callback:
             try:
                 self.on_alert_callback(alert_payload)
             except Exception as e:
                 print(f"[Auditor] Local alert dispatch error: {e}")
 
-        # 2. Asynchronous dispatch to Cloud Server for 24/7 retention and offline viewing
-        threading.Thread(target=self._send_to_cloud, args=(alert_payload,), daemon=True).start()
+        # 3. Wake sync worker to push to Render
+        if self._sync_event:
+            self._sync_event.set()
 
-    def _send_to_cloud(self, payload):
-        target_urls = [
-            f"{self.cloud_server_url.rstrip('/')}/api/alerts",
-            "http://127.0.0.1:8765/api/alerts"  # Fallback to local server if running locally
-        ]
-        data = json.dumps(payload).encode("utf-8")
-        for url in target_urls:
+    def _sync_worker(self):
+        """Continuously flushes unsynced alerts to Render cloud DB every 10 seconds or on-demand."""
+        while self.is_running:
+            try:
+                self._flush_offline_queue()
+            except Exception as e:
+                pass
+            self._sync_event.wait(timeout=10.0)
+            self._sync_event.clear()
+
+    def _flush_offline_queue(self):
+        """Pushes queued offline alerts to Render cloud database."""
+        if not os.path.exists(OFFLINE_DB_PATH):
+            return
+
+        try:
+            conn = sqlite3.connect(OFFLINE_DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT * FROM offline_alerts 
+                WHERE synced = 0 
+                ORDER BY created_timestamp ASC 
+                LIMIT 50
+            """)
+            rows = cur.fetchall()
+            conn.close()
+        except Exception:
+            return
+
+        if not rows:
+            return
+
+        cloud_endpoint = f"{self.cloud_server_url.rstrip('/')}/api/alerts"
+        synced_ids = []
+
+        for r in rows:
+            payload = {
+                "pc_id": r["pc_id"],
+                "pc_name": r["pc_name"],
+                "event_type": r["event_type"],
+                "title": r["title"],
+                "details": r["details"],
+                "bill_no": r["bill_no"],
+                "amount": r["amount"],
+                "discount": r["discount"],
+                "item_count": r["item_count"],
+                "barcode": r["barcode"],
+                "severity": r["severity"],
+                "created_at": r["created_at"],
+                "created_timestamp": r["created_timestamp"]
+            }
+            data = json.dumps(payload).encode("utf-8")
             try:
                 req = urllib.request.Request(
-                    url,
+                    cloud_endpoint,
                     data=data,
                     headers={"Content-Type": "application/json", "User-Agent": "AnyLocal-Auditor/1.0"},
                     method="POST"
                 )
-                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                with urllib.request.urlopen(req, timeout=4.0) as resp:
                     if resp.status in (200, 201):
-                        return
+                        synced_ids.append(r["id"])
+                    else:
+                        break
             except Exception:
-                pass
+                # Render server asleep / network offline / Tailscale down
+                # Stop batch immediately, will retry when back online
+                break
+
+        if synced_ids:
+            try:
+                conn = sqlite3.connect(OFFLINE_DB_PATH)
+                cur = conn.cursor()
+                placeholders = ",".join("?" for _ in synced_ids)
+                cur.execute(f"UPDATE offline_alerts SET synced = 1 WHERE id IN ({placeholders})", synced_ids)
+                # Purge synced alerts older than 7 days
+                cutoff = time.time() - (7 * 86400)
+                cur.execute("DELETE FROM offline_alerts WHERE synced = 1 AND created_timestamp < ?", (cutoff,))
+                conn.commit()
+                conn.close()
+                print(f"[Auditor Sync] Successfully synced {len(synced_ids)} offline alerts to Render cloud DB.")
+            except Exception as e:
+                print(f"[Auditor Sync] DB update error: {e}")
 
     def _attach_desktop(self):
         """Ensures thread is attached to current input desktop to inspect windows."""

@@ -158,21 +158,37 @@ class HostServer:
                 return Response(200, "OK", headers, body)
 
         elif request.path.startswith("/api/alerts"):
+            if request.method == "OPTIONS":
+                headers = Headers([
+                    ("Access-Control-Allow-Origin", "*"),
+                    ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                    ("Access-Control-Allow-Headers", "*")
+                ])
+                return Response(200, "OK", headers, b"")
+
             try:
                 import sqlite3
+                offline_db = Path(os.path.expanduser("~")) / ".anylocal_alerts_offline.db"
                 server_db = Path(__file__).resolve().parent.parent / "server" / "alerts.db"
-                if not server_db.exists():
-                    server_db = Path(os.path.expanduser("~")) / ".anylocal_alerts.db"
-                if server_db.exists():
-                    conn = sqlite3.connect(str(server_db))
+                alerts = []
+
+                if offline_db.exists():
+                    conn = sqlite3.connect(str(offline_db))
                     conn.row_factory = sqlite3.Row
                     cur = conn.cursor()
-                    cur.execute("SELECT * FROM alerts ORDER BY created_timestamp DESC LIMIT 100")
+                    cur.execute("SELECT * FROM offline_alerts ORDER BY created_timestamp DESC LIMIT 150")
                     rows = cur.fetchall()
                     alerts = [dict(r) for r in rows]
                     conn.close()
-                else:
-                    alerts = []
+                elif server_db.exists():
+                    conn = sqlite3.connect(str(server_db))
+                    conn.row_factory = sqlite3.Row
+                    cur = conn.cursor()
+                    cur.execute("SELECT * FROM alerts ORDER BY created_timestamp DESC LIMIT 150")
+                    rows = cur.fetchall()
+                    alerts = [dict(r) for r in rows]
+                    conn.close()
+
                 body = json.dumps({"status": "ok", "count": len(alerts), "alerts": alerts}).encode("utf-8")
                 headers = Headers([
                     ("Content-Type", "application/json; charset=utf-8"),
