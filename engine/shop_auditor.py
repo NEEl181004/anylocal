@@ -49,7 +49,7 @@ def get_auditor_config():
     cfg = {
         "pc_id": socket.gethostname().upper(),
         "pc_name": f"Counter ({socket.gethostname()})",
-        "cloud_server_url": "https://anylocal-relay.onrender.com",
+        "cloud_server_url": "https://anylocal.onrender.com",
         "local_server_port": 8765,
         "poll_interval": 1.0,
         "enabled": True
@@ -76,7 +76,7 @@ class ShopAuditor:
         self.config = get_auditor_config()
         self.pc_id = self.config.get("pc_id", socket.gethostname().upper())
         self.pc_name = self.config.get("pc_name", f"Counter ({self.pc_id})")
-        self.cloud_server_url = self.config.get("cloud_server_url", "https://anylocal-relay.onrender.com")
+        self.cloud_server_url = self.config.get("cloud_server_url", "https://anylocal.onrender.com")
         self.on_alert_callback = on_alert_callback
 
         self.is_running = False

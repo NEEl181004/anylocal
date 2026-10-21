@@ -982,7 +982,7 @@
       <div class="card-title">Render Cloud Server Configuration</div>
       <div class="form-group">
         <label class="form-label">Cloud Server URL (24/7 Relay & Database)</label>
-        <input type="text" id="cfgCloudUrl" class="input-field" placeholder="https://anylocal-relay.onrender.com">
+        <input type="text" id="cfgCloudUrl" class="input-field" placeholder="https://anylocal.onrender.com">
       </div>
       <button class="btn-gradient" id="btnSaveCloudUrl" style="padding:10px; font-size:12px; margin-top:4px;">
         <span>💾 Save Server URL</span>
@@ -2151,7 +2151,7 @@
     const btnDownloadNewApk = document.getElementById("btnDownloadNewApk");
 
     document.getElementById("btnServerSettings").onclick = () => {
-      cfgCloudUrl.value = localStorage.getItem("cloud_relay_url") || "https://anylocal-relay.onrender.com";
+      cfgCloudUrl.value = localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com";
       serverSettingsModal.style.display = "flex";
     };
 
@@ -2168,7 +2168,7 @@
     };
 
     btnCheckAppUpdate.onclick = async () => {
-      const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "https://anylocal-relay.onrender.com").replace(/\/+$/, "");
+      const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").replace(/\/+$/, "");
       appUpdateStatus.innerHTML = `<span style="color:#38bdf8;">Connecting to ${targetUrl}/api/version...</span>`;
       try {
         const res = await fetch(`${targetUrl}/api/version`);

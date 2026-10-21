@@ -41,7 +41,7 @@ def check_and_apply_auto_update():
 
     time.sleep(4.0)
     server_urls = [
-        "https://anylocal-relay.onrender.com",
+        "https://anylocal.onrender.com",
         "http://127.0.0.1:8765"
     ]
     for base_url in server_urls:
@@ -1413,7 +1413,7 @@ class AnyLocalApp:
         tk.Label(c2, text="Render Cloud Server URL:", bg="#1e293b", fg="#e2e8f0", font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 2))
         entry_server = tk.Entry(c2, bg="#0f172a", fg="#ffffff", font=("Segoe UI", 10), insertbackground="white")
         entry_server.pack(fill=tk.X)
-        entry_server.insert(0, self.config.get("cloud_server_url", "https://anylocal-relay.onrender.com"))
+        entry_server.insert(0, self.config.get("cloud_server_url", "https://anylocal.onrender.com"))
 
         tk.Label(c2, text="PC / Counter Name (e.g. PC-A - Counter 1):", bg="#1e293b", fg="#e2e8f0", font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 2))
         entry_pc = tk.Entry(c2, bg="#0f172a", fg="#ffffff", font=("Segoe UI", 10), insertbackground="white")
