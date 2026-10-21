@@ -223,7 +223,7 @@ class HostServer:
                 return Response(200, "OK", headers, body)
 
         elif request.path == "/api/version":
-            body = json.dumps({"status": "ok", "version": "2.4.0", "name": "AnyLocal"}).encode("utf-8")
+            body = json.dumps({"status": "ok", "version": "2.4.1", "name": "AnyLocal"}).encode("utf-8")
             headers = Headers([("Content-Type", "application/json"), ("Access-Control-Allow-Origin", "*")])
             return Response(200, "OK", headers, body)
 

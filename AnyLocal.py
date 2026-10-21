@@ -29,41 +29,47 @@ from engine.power_manager import (
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".anylocal_config.json")
 APP_VERSION = "2.4.1"
 
-def check_and_apply_auto_update():
+def check_and_apply_auto_update(manual=False):
     """
-    Checks Render Cloud Server for updates silently in the background.
-    If a new AnyLocal version is deployed to Render, it automatically downloads and updates
-    the local .exe without the user having to delete and reinstall!
+    Downloads and applies updates ONLY when manually triggered by the user.
+    Never terminates or restarts sessions automatically in the background.
     """
+    if not manual:
+        return
+
     import urllib.request
     import subprocess
 
-    time.sleep(4.0)
-    server_urls = [
-        "https://anylocal.onrender.com",
-        "http://127.0.0.1:8765"
-    ]
-    for base_url in server_urls:
-        try:
-            req = urllib.request.Request(
-                f"{base_url}/api/version",
-                headers={"User-Agent": f"AnyLocal/{APP_VERSION}"}
-            )
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    remote_ver = data.get("version", APP_VERSION)
-                    if remote_ver != APP_VERSION and getattr(sys, 'frozen', False):
-                        download_url = data.get("download_url", "/download/AnyLocal.exe")
-                        if not download_url.startswith("http"):
-                            download_url = f"{base_url.rstrip('/')}/{download_url.lstrip('/')}"
-                        
-                        current_exe = sys.executable
-                        exe_dir = os.path.dirname(current_exe)
-                        temp_update_exe = os.path.join(exe_dir, "AnyLocal_update.exe")
-                        
-                        urllib.request.urlretrieve(download_url, temp_update_exe)
-                        
+    target_url = "https://anylocal.onrender.com"
+    try:
+        cfg = load_saved_config()
+        if "cloud_server_url" in cfg and cfg["cloud_server_url"]:
+            target_url = cfg["cloud_server_url"].rstrip('/')
+    except Exception:
+        pass
+
+    try:
+        req = urllib.request.Request(
+            f"{target_url}/api/version",
+            headers={"User-Agent": f"AnyLocal/{APP_VERSION}"}
+        )
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                remote_ver = data.get("version", APP_VERSION)
+                if remote_ver != APP_VERSION and getattr(sys, 'frozen', False):
+                    download_url = data.get("download_url", "/download/AnyLocal.exe")
+                    if not download_url.startswith("http"):
+                        download_url = f"{target_url}/{download_url.lstrip('/')}"
+
+                    current_exe = sys.executable
+                    exe_dir = os.path.dirname(current_exe)
+                    temp_update_exe = os.path.join(exe_dir, "AnyLocal_update.exe")
+
+                    urllib.request.urlretrieve(download_url, temp_update_exe)
+
+                    # Validate downloaded file size (> 10MB) to ensure complete download
+                    if os.path.exists(temp_update_exe) and os.path.getsize(temp_update_exe) > 10 * 1024 * 1024:
                         bat_path = os.path.join(exe_dir, "_apply_update.bat")
                         bat_content = f"""@echo off
 timeout /t 2 /nobreak >nul
@@ -74,14 +80,13 @@ del "%~f0"
 """
                         with open(bat_path, "w") as bf:
                             bf.write(bat_content)
-                        
+
                         flags = 0x08000000 if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
                         subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags)
                         sys.exit(0)
                         return
-                    return
-        except Exception:
-            continue
+    except Exception as e:
+        print(f"[AutoUpdate Error] {e}")
 
 def generate_random_pin(length=6):
     return "".join(random.choices(string.digits, k=length))
@@ -1504,7 +1509,7 @@ class AnyLocalApp:
                             def do_apply():
                                 lbl_update_status.config(text="Downloading update from Render & restarting...", fg="#38bdf8")
                                 modal.update()
-                                check_and_apply_auto_update()
+                                check_and_apply_auto_update(manual=True)
                             btn_apply_update.config(command=do_apply)
                         else:
                             lbl_update_status.config(text=f"✅ You are up to date! Current version: v{APP_VERSION}", fg="#22c55e")
@@ -1573,9 +1578,6 @@ def main():
     root = tk.Tk()
     app = AnyLocalApp(root)
     root.protocol("WM_DELETE_WINDOW", app._on_close_clicked)
-
-    # Start silent auto-updater thread (zero manual reinstall)
-    threading.Thread(target=check_and_apply_auto_update, daemon=True).start()
 
     # If launched on Windows boot in background, hide window immediately
     if "--background" in sys.argv or "--minimized" in sys.argv:
