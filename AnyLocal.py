@@ -27,8 +27,7 @@ from engine.power_manager import (
 )
 
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".anylocal_config.json")
-
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 
 def check_and_apply_auto_update():
     """
@@ -360,6 +359,51 @@ class AnyLocalApp:
         self._build_guide_tab()
 
     def _build_host_tab(self):
+        # Card 0: Branch & Counter Identification
+        card_branch = tk.Frame(self.tab_host, bg="#1e293b", padx=20, pady=12, relief=tk.FLAT)
+        card_branch.pack(fill=tk.X, padx=10, pady=(8, 4))
+
+        tk.Label(
+            card_branch,
+            text="🏢 Shop Branch / PC Name:",
+            bg="#1e293b",
+            fg="#38bdf8",
+            font=("Segoe UI", 10, "bold")
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        default_branch = self.config.get("pc_name") or f"Counter ({self.net_info.get('hostname', 'PC')})"
+        self.entry_branch_name = tk.Entry(
+            card_branch,
+            bg="#0f172a",
+            fg="#ffffff",
+            font=("Segoe UI", 11, "bold"),
+            width=26,
+            insertbackground="white"
+        )
+        self.entry_branch_name.insert(0, default_branch)
+        self.entry_branch_name.pack(side=tk.LEFT, padx=(0, 10))
+
+        def on_save_branch():
+            new_name = self.entry_branch_name.get().strip()
+            if new_name:
+                self.config["pc_name"] = new_name
+                save_config(self.config)
+                if self.server and hasattr(self.server, "auditor"):
+                    self.server.auditor.refresh_identity()
+                messagebox.showinfo("Saved", f"PC / Branch Name set to: '{new_name}'\nSecurity alerts will identify as '{new_name}'.")
+
+        btn_save = tk.Button(
+            card_branch,
+            text="💾 Save Branch Name",
+            bg="#0284c7",
+            fg="#ffffff",
+            font=("Segoe UI", 9, "bold"),
+            relief=tk.FLAT,
+            padx=10,
+            command=on_save_branch
+        )
+        btn_save.pack(side=tk.LEFT)
+
         # Card 1: Connection Addresses
         card_addr = tk.Frame(self.tab_host, bg="#1e293b", padx=20, pady=16, relief=tk.FLAT)
         card_addr.pack(fill=tk.X, padx=10, pady=8)

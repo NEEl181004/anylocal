@@ -314,12 +314,17 @@ class ShopAuditor:
                 print(f"[Auditor Sync] DB update error: {e}")
 
     def _attach_desktop(self):
-        """Ensures thread is attached to current input desktop to inspect windows."""
+        """Ensures thread is attached to the interactive window station and desktop to inspect windows."""
         try:
-            hDesk = ctypes.windll.user32.OpenInputDesktop(0, False, 0x01FF)
-            if hDesk:
-                ctypes.windll.user32.SetThreadDesktop(hDesk)
-                return hDesk
+            hwinsta = ctypes.windll.user32.OpenWindowStationW("winsta0", False, 0x01FF)
+            if hwinsta:
+                ctypes.windll.user32.SetProcessWindowStation(hwinsta)
+            hdesk = ctypes.windll.user32.OpenDesktopW("default", 0, False, 0x01FF)
+            if not hdesk:
+                hdesk = ctypes.windll.user32.OpenInputDesktop(0, False, 0x01FF)
+            if hdesk:
+                ctypes.windll.user32.SetThreadDesktop(hdesk)
+                return hdesk
         except Exception:
             pass
         return None
@@ -333,16 +338,51 @@ class ShopAuditor:
             except Exception as e:
                 # Silent catch to prevent any disruption on desktop
                 pass
-            time.sleep(self.config.get("poll_interval", 1.0))
+            time.sleep(self.config.get("poll_interval", 0.6))
+
+    def _get_control_text(self, hwnd):
+        """Extracts text from a Win32 window or child control across process boundaries using WM_GETTEXT."""
+        try:
+            length = win32gui.SendMessage(hwnd, win32con.WM_GETTEXTLENGTH, 0, 0)
+            if 0 < length < 8192:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                win32gui.SendMessage(hwnd, win32con.WM_GETTEXT, length + 1, buf)
+                val = buf.value.strip()
+                if val:
+                    return val
+        except Exception:
+            pass
+        try:
+            val = win32gui.GetWindowText(hwnd).strip()
+            if val:
+                return val
+        except Exception:
+            pass
+        return ""
+
+    def _get_all_window_texts(self, hwnd):
+        """Recursively retrieves text from all child controls in a window hierarchy."""
+        texts = []
+        def enum_cb(child, _):
+            t = self._get_control_text(child)
+            if t and t not in texts:
+                texts.append(t)
+            return True
+        try:
+            win32gui.EnumChildWindows(hwnd, enum_cb, None)
+        except Exception:
+            pass
+        return texts
 
     def _check_windows_and_screens(self):
         """
-        Scans windows for Quick Software activities:
-        - Sales List window open
-        - Bill opened
-        - Delete Row dialog
-        - Head Type Discount entered
-        - Entire Bill deleted
+        Scans all visible windows and dialogs for Quick Software activities:
+        1. Bill Saved & Printed
+        2. Sales List Opened
+        3. Specific Bill Opened
+        4. Product Deleted from Bill ('Delete Row ?')
+        5. Entire Bill Deleted ('Delete Voucher ?' / 'Delete Bill ?')
+        6. Head Type Discount Applied
         """
         windows = []
         try:
@@ -350,66 +390,66 @@ class ShopAuditor:
         except Exception:
             return
 
-        active_hwnd = win32gui.GetForegroundWindow()
-        active_title = win32gui.GetWindowText(active_hwnd) if active_hwnd else ""
+        delete_row_found = False
+        delete_bill_found = False
 
-        # Check all visible windows for Quick Software components
         for hwnd in windows:
             try:
                 title = win32gui.GetWindowText(hwnd).strip()
-                if not title:
-                    continue
+                title_lower = title.lower()
 
-                # 1. Dialog: "Delete Row ?" (Event 4: Product Deleted from Bill)
-                if "Delete Row" in title or (title == "Delete Row ?"):
+                # Get all texts from this window and its child controls
+                child_texts = self._get_all_window_texts(hwnd)
+                joined_all = " ".join([title] + child_texts).lower()
+
+                # --- EVENT 4: Product Deleted from Bill ("Delete Row ?") ---
+                if "delete row" in joined_all or "delete item" in joined_all:
+                    delete_row_found = True
                     if not self.delete_dialog_active:
                         self.delete_dialog_active = True
-                        self._handle_product_delete_dialog(hwnd)
+                        self._handle_product_delete_dialog(hwnd, child_texts)
                     continue
 
-                # Quick Software main / sub window detection
-                if "Quick Software" in title or "LUGDA BAZAAR" in title:
-                    self._inspect_quick_software_window(hwnd, title)
+                # --- EVENT 5: Entire Bill Deleted ("Delete Voucher ?" or "Delete Bill ?") ---
+                is_bill_del = any(k in joined_all for k in [
+                    "delete voucher", "delete bill", "delete record", "delete this voucher",
+                    "delete entire", "are you sure to delete record", "are you sure to delete this voucher"
+                ])
+                if is_bill_del and "delete row" not in joined_all:
+                    delete_bill_found = True
+                    if not getattr(self, "delete_bill_dialog_active", False):
+                        self.delete_bill_dialog_active = True
+                        self._handle_entire_bill_delete_dialog(hwnd, child_texts)
+                    continue
+
+                # --- QUICK SOFTWARE MAIN WINDOW INSPECTION ---
+                is_qs = any(x in title_lower or x in joined_all for x in [
+                    "quick software", "quicksoft", "lugda bazaar", "lugda", "working company", "fast search", "quick setup"
+                ])
+
+                if is_qs:
+                    self._inspect_quick_software_window(hwnd, title, child_texts)
 
             except Exception:
                 pass
 
-        # Reset delete dialog flag when dialog closes
-        if self.delete_dialog_active:
-            dialog_found = False
-            for hwnd in windows:
-                if "Delete Row" in win32gui.GetWindowText(hwnd):
-                    dialog_found = True
-                    break
-            if not dialog_found:
-                self.delete_dialog_active = False
+        # Reset modal state when dialog closes
+        if self.delete_dialog_active and not delete_row_found:
+            self.delete_dialog_active = False
 
-    def _inspect_quick_software_window(self, hwnd, title):
+        if getattr(self, "delete_bill_dialog_active", False) and not delete_bill_found:
+            self.delete_bill_dialog_active = False
+
+    def _inspect_quick_software_window(self, hwnd, title, child_texts):
         now = time.time()
+        joined = " ".join([title] + child_texts).lower()
 
-        # Check for Event 2: "Sales" list opened (Screenshot 3)
-        # Main title contains "Sales" but NOT "Sales Add"
-        is_sales_list = False
-        is_sales_add = False
+        # Check if Sales Add screen or Sales List screen
+        is_sales_add = "sales add" in joined
+        is_sales_list = ("sales" in joined and not is_sales_add and "sales man" not in joined) or ("vch. no." in joined and "g. amount" in joined and not is_sales_add)
 
-        if "Sales Add" in title:
-            is_sales_add = True
-        elif "Sales" in title and "Sales Man" not in title:
-            is_sales_list = True
-
-        # Also inspect child controls / sub-titles if the text is rendered inside a child frame
-        child_texts = self._get_window_texts(hwnd)
-
-        for txt in child_texts:
-            if "Sales Add" in txt:
-                is_sales_add = True
-                is_sales_list = False
-                break
-            elif txt == "Sales":
-                is_sales_list = True
-
-        # Trigger Event 2: Sales List Opened
-        if is_sales_list:
+        # --- EVENT 2: Sales List Opened ---
+        if is_sales_list and not is_sales_add:
             if now - self.last_sales_list_alert_time > 15.0:  # Debounce 15s
                 self.last_sales_list_alert_time = now
                 self.emit_alert(
@@ -419,18 +459,19 @@ class ShopAuditor:
                     severity="info"
                 )
 
-        # Trigger Event 3, 5, 6: Inside "Sales Add" screen
-        if is_sales_add:
+        # --- EVENT 3, 5, 6: Inside "Sales Add" Screen ---
+        if is_sales_add or "vch. no." in joined:
             self._parse_sales_add_screen(hwnd, child_texts)
 
     def _parse_sales_add_screen(self, hwnd, child_texts):
         """
-        Parses text inside Sales Add to detect:
+        Parses Sales Add screen controls to extract:
         - Voucher No (e.g. 20-52825)
-        - Head Type: Discount (Event 6)
-        - Specific Bill Opened from List (Event 3)
+        - Head Type Discount (Event 6)
         - Total Amount / G. Amount
+        - Item count
         """
+        import re
         now = time.time()
         bill_no = ""
         g_amount = 0.0
@@ -439,79 +480,91 @@ class ShopAuditor:
         discount_amount = 0.0
         head_type = ""
 
-        # Extract values from child texts / controls
+        # Extract values
         for i, txt in enumerate(child_texts):
-            txt_clean = txt.strip()
-            if txt_clean.startswith("20-") and len(txt_clean) >= 7:
-                bill_no = txt_clean
-            elif "Vch. No." in txt_clean and i + 1 < len(child_texts):
-                possible_vch = child_texts[i+1].strip()
-                if possible_vch.startswith("20-"):
-                    bill_no = possible_vch
+            clean = txt.strip()
+            # Match voucher format like 20-52825 or any XX-XXXXX
+            vch_match = re.search(r'\b\d{2}-\d{4,6}\b', clean)
+            if vch_match and not bill_no:
+                bill_no = vch_match.group(0)
 
-            if txt_clean == "Head Type" and i + 1 < len(child_texts):
+            if clean.lower() == "head type" and i + 1 < len(child_texts):
                 head_type = child_texts[i+1].strip()
-            elif "Discount" in txt_clean:
+            elif "discount" in clean.lower():
                 has_discount = True
 
-            if txt_clean.replace(".", "", 1).replace("-", "", 1).isdigit():
-                val = float(txt_clean)
-                if val < 0:
-                    discount_amount = abs(val)
+            # Match numerical amounts
+            if clean.replace(".", "", 1).replace("-", "", 1).isdigit():
+                try:
+                    val = float(clean)
+                    if val < 0:
+                        discount_amount = abs(val)
+                    elif val > 100 and val > g_amount:
+                        g_amount = val
+                except Exception:
+                    pass
 
-        # Save active bill context
+        # Update active bill context
         if bill_no:
             self.active_bill_context["bill_no"] = bill_no
+        if g_amount > 0:
+            self.active_bill_context["total_amount"] = g_amount
 
-        # Event 3: Specific Bill Opened from List
+        # --- EVENT 3: Specific Bill Opened from List ---
         if bill_no and bill_no != self.last_opened_bill_no:
-            if now - self.last_bill_open_time > 8.0:
+            if now - self.last_bill_open_time > 6.0:
                 self.last_opened_bill_no = bill_no
                 self.last_bill_open_time = now
+                amt_str = f" (Amount: ₹{g_amount:.2f})" if g_amount > 0 else ""
                 self.emit_alert(
                     event_type="BILL_OPENED",
                     title=f"📄 Bill Opened: #{bill_no}",
-                    details=f"Voucher #{bill_no} was opened for viewing/editing on {self.pc_name}.",
+                    details=f"Voucher #{bill_no} was opened for viewing/editing on {self.pc_name}{amt_str}.",
                     bill_no=bill_no,
+                    amount=g_amount,
                     severity="info"
                 )
 
-        # Event 6: Head Type Discount Applied (Screenshot 4)
+        # --- EVENT 6: Head Type Discount Applied ---
         if (head_type.lower() == "discount" or has_discount) and discount_amount > 0:
             discount_key = f"{bill_no}_{discount_amount}"
             if discount_key != self.last_discount_alert_voucher:
                 self.last_discount_alert_voucher = discount_key
+                total_context = g_amount or self.active_bill_context.get("total_amount", 0.0)
+                total_info = f" Total Bill Amount: ₹{total_context:.2f}." if total_context > 0 else ""
                 self.emit_alert(
                     event_type="DISCOUNT_APPLIED",
                     title=f"💸 Discount Applied: Bill #{bill_no}",
-                    details=f"Head Type Discount of ₹{discount_amount:.2f} was applied to Bill #{bill_no} on {self.pc_name}.",
+                    details=f"Head Type Discount of ₹{discount_amount:.2f} was applied to Bill #{bill_no} on {self.pc_name}.{total_info}",
                     bill_no=bill_no,
                     discount=discount_amount,
+                    amount=total_context,
                     severity="warning"
                 )
 
-    def _handle_product_delete_dialog(self, dialog_hwnd):
+    def _handle_product_delete_dialog(self, dialog_hwnd, dialog_texts):
         """
-        Event 4: Triggered when 'Delete Row ?' confirmation modal pops up (Screenshot 5).
-        Reads product details and emits alert.
+        EVENT 4: Triggered when 'Delete Row ?' confirmation modal pops up.
+        Extracts product details and emits alert.
         """
+        import re
         bill_no = self.active_bill_context.get("bill_no", "Current Bill")
-        
-        # Try to read row context from active UI
         barcode = "Unknown Barcode"
-        product_name = "Product Item"
+        product_name = "Product Row"
         rate = 0.0
 
+        # Try to read row context from active UI
         if UIA_AVAILABLE:
             try:
-                # Look for table rows near active window
                 root = auto.GetRootControl()
                 for c in root.GetChildren():
-                    if "Quick Software" in c.Name or "LUGDA" in c.Name:
+                    c_name = (c.Name or "").lower()
+                    if "quick" in c_name or "lugda" in c_name:
                         for sub in c.GetChildren():
-                            if sub.ControlTypeName == "TableControl" or sub.ControlTypeName == "DataGridControl":
-                                # Extract selected item
-                                pass
+                            if sub.ControlTypeName in ("TableControl", "DataGridControl", "CustomControl"):
+                                sub_text = sub.Name or ""
+                                if sub_text:
+                                    product_name = sub_text
             except Exception:
                 pass
 
@@ -522,12 +575,43 @@ class ShopAuditor:
             details=details,
             bill_no=bill_no,
             barcode=barcode,
+            amount=rate,
+            severity="danger"
+        )
+
+    def _handle_entire_bill_delete_dialog(self, dialog_hwnd, dialog_texts):
+        """
+        EVENT 5: Triggered when 'Delete Voucher ?' / 'Delete Bill ?' modal pops up.
+        Emits alert for entire bill deletion.
+        """
+        import re
+        bill_no = self.active_bill_context.get("bill_no", "Current Voucher")
+        total_amt = self.active_bill_context.get("total_amount", 0.0)
+        items_count = self.active_bill_context.get("item_count", 1)
+
+        # Check if dialog specifies voucher number
+        for txt in dialog_texts:
+            m = re.search(r'\b\d{2}-\d{4,6}\b', txt)
+            if m:
+                bill_no = m.group(0)
+
+        details = f"Entire Bill #{bill_no} was deleted on {self.pc_name}."
+        if total_amt > 0:
+            details += f" Total Voucher Value: ₹{total_amt:.2f} ({items_count} items)."
+
+        self.emit_alert(
+            event_type="BILL_DELETED",
+            title=f"🚨 Entire Bill Deleted: #{bill_no}",
+            details=details,
+            bill_no=bill_no,
+            amount=total_amt,
+            item_count=items_count,
             severity="danger"
         )
 
     def _check_print_spooler(self):
         """
-        Event 1: Bill Saved and Printed.
+        EVENT 1: Bill Saved and Printed.
         Monitors Windows Print Spooler for print jobs dispatched to receipt/invoice printers.
         """
         try:
@@ -554,7 +638,7 @@ class ShopAuditor:
                             self.emit_alert(
                                 event_type="BILL_PRINTED",
                                 title=f"🖨️ Bill Printed: #{bill_no}",
-                                details=f"Bill #{bill_no} was saved and sent to printer '{p_name}' ({items_count} items) on {self.pc_name}.",
+                                details=f"Bill #{bill_no} was saved and printed on '{p_name}' ({items_count} items) on {self.pc_name}.",
                                 bill_no=bill_no,
                                 item_count=items_count,
                                 amount=total_amt,
@@ -564,20 +648,6 @@ class ShopAuditor:
                     pass
         except Exception:
             pass
-
-    def _get_window_texts(self, hwnd):
-        """Extracts text elements from a window hierarchy."""
-        texts = []
-        def enum_child(child_hwnd, _):
-            txt = win32gui.GetWindowText(child_hwnd).strip()
-            if txt:
-                texts.append(txt)
-            return True
-        try:
-            win32gui.EnumChildWindows(hwnd, enum_child, None)
-        except Exception:
-            pass
-        return texts
 
 
 # Global singleton instance

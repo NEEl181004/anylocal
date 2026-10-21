@@ -82,8 +82,8 @@ class HostServer:
         self.auditor.on_alert_callback = self._on_security_alert
 
     def _on_security_alert(self, alert_payload):
-        """Dispatches real-time security alert down WebSocket to connected phone APK."""
-        if self.active_client_ws and self.loop and self.active_client_type == "mobile":
+        """Dispatches real-time security alert down WebSocket to any connected client (phone, browser, desktop)."""
+        if self.active_client_ws and self.loop:
             try:
                 msg = json.dumps({
                     "type": "security_alert",
