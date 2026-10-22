@@ -1127,6 +1127,35 @@
     </div>
   </div>
 
+  <!-- Edit PC Modal -->
+  <div id="editPcModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:900; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#0f172a; border:1px solid #0284c7; border-radius:20px; padding:24px; width:100%; max-width:380px; box-shadow:0 20px 50px rgba(0,0,0,0.8); text-align:left;">
+      <div style="font-size:16px; font-weight:700; color:#38bdf8; margin-bottom:14px; text-align:center;">✏️ Edit Shop Computer</div>
+      <div class="form-group">
+        <label class="form-label">Branch / Computer Name</label>
+        <input type="text" id="editPcName" class="input-field" placeholder="Bhuj Counter">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tailscale IP Address</label>
+        <input type="text" id="editPcHost" class="input-field" placeholder="100.85.146.86">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div class="form-group" style="flex:1;">
+          <label class="form-label">Port</label>
+          <input type="number" id="editPcPort" class="input-field" value="8765">
+        </div>
+        <div class="form-group" style="flex:2;">
+          <label class="form-label">PIN / Password</label>
+          <input type="password" id="editPcPin" class="input-field" placeholder="PIN / Password">
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn-gradient" id="btnEditPcSave" style="flex:1;"><span>💾 Save Branch</span></button>
+        <button class="btn-del-sm" id="btnEditPcCancel" style="padding:10px 16px; border-radius:12px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script>
@@ -1228,11 +1257,14 @@
         item.className = "pc-card-item";
         item.innerHTML = `
           <div class="pc-info">
-            <div class="pc-name">🏢 ${pc.name}</div>
-            <div class="pc-address">${pc.host}:${pc.port}</div>
+            <div class="pc-name">🏢 ${escapeHtml(pc.name)}</div>
+            <div class="pc-address">${escapeHtml(pc.host)}:${pc.port || 8765}</div>
           </div>
-          <button class="btn-connect-sm" data-idx="${idx}">⚡ Connect</button>
-          <button class="btn-del-sm" data-del="${idx}">🗑️</button>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn-connect-sm" data-idx="${idx}">⚡ Connect</button>
+            <button class="btn-edit-sm" data-edit="${idx}" style="background:#1e293b; color:#38bdf8; border:1px solid #334155; padding:8px 10px; border-radius:10px; cursor:pointer; font-size:12px;" title="Edit IP / PIN">✏️</button>
+            <button class="btn-del-sm" data-del="${idx}">🗑️</button>
+          </div>
         `;
         homePcListContainer.appendChild(item);
       });
@@ -1242,6 +1274,14 @@
         b.onclick = () => {
           const idx = parseInt(b.getAttribute("data-idx"));
           startConnection(savedPcs[idx]);
+        };
+      });
+
+      // Bind Edit Buttons
+      homePcListContainer.querySelectorAll(".btn-edit-sm").forEach(b => {
+        b.onclick = () => {
+          const idx = parseInt(b.getAttribute("data-edit"));
+          openEditPcModal(idx);
         };
       });
 
@@ -1260,6 +1300,56 @@
         renderPcFilterBar();
       }
     }
+
+    // --- Edit PC Modal Logic ---
+    let currentEditIdx = -1;
+    function openEditPcModal(idx) {
+      currentEditIdx = idx;
+      const pc = savedPcs[idx];
+      document.getElementById("editPcName").value = pc.name || "";
+      let hostVal = pc.host || "";
+      // Suggest correction if user accidentally typed 100.185.
+      if (hostVal.startsWith("100.185.")) {
+        hostVal = hostVal.replace("100.185.", "100.85.");
+      }
+      document.getElementById("editPcHost").value = hostVal;
+      document.getElementById("editPcPort").value = pc.port || 8765;
+      document.getElementById("editPcPin").value = pc.pin || "";
+      document.getElementById("editPcModal").style.display = "flex";
+    }
+
+    document.getElementById("btnEditPcCancel").onclick = () => {
+      document.getElementById("editPcModal").style.display = "none";
+      currentEditIdx = -1;
+    };
+
+    document.getElementById("btnEditPcSave").onclick = () => {
+      if (currentEditIdx < 0 || currentEditIdx >= savedPcs.length) return;
+      const name = document.getElementById("editPcName").value.trim();
+      let host = document.getElementById("editPcHost").value.trim();
+      const port = parseInt(document.getElementById("editPcPort").value) || 8765;
+      const pin = document.getElementById("editPcPin").value.trim();
+
+      if (!host) {
+        showToast("⚠️ IP address cannot be empty");
+        return;
+      }
+      if (host.startsWith("100.185.")) {
+        host = host.replace("100.185.", "100.85.");
+        showToast("💡 Auto-corrected IP to 100.85...");
+      }
+
+      savedPcs[currentEditIdx].name = name || host;
+      savedPcs[currentEditIdx].host = host;
+      savedPcs[currentEditIdx].port = port;
+      savedPcs[currentEditIdx].pin = pin;
+
+      saveComputersList(savedPcs);
+      renderHomePcList();
+      document.getElementById("editPcModal").style.display = "none";
+      currentEditIdx = -1;
+      showToast("✅ Branch Updated Successfully!");
+    };
 
     // --- Toast Notifications ---
     function showToast(msg) {
@@ -1370,7 +1460,7 @@
 
     async function fetchSecurityAlerts() {
       const cloudUrl = (localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").trim().replace(/\/+$/, "");
-      let dataFetched = false;
+      let fetchedAlerts = [];
 
       // 1. Fetch from Render Cloud DB (central 24/7 database)
       try {
@@ -1378,30 +1468,40 @@
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.alerts)) {
-            cachedAlerts = data.alerts;
-            dataFetched = true;
+            fetchedAlerts = data.alerts;
           }
         }
       } catch(e) {
         console.warn("Render cloud alerts fetch error:", e);
       }
 
-      // 2. Fallback to direct local PC if Render is down or phone is offline
-      if (!dataFetched) {
-        const activeHost = currentConnectingPc ? currentConnectingPc.host : (savedPcs.length > 0 ? savedPcs[0].host : (window.location.hostname || ""));
-        const activePort = currentConnectingPc ? currentConnectingPc.port : (savedPcs.length > 0 ? savedPcs[0].port : (window.location.port || "8765"));
-        if (activeHost && activeHost !== "localhost" && activeHost !== "127.0.0.1") {
+      // 2. Fetch directly from all saved shop computers (merging local & cloud data)
+      for (const p of savedPcs) {
+        let h = (p.host || "").trim();
+        if (h.startsWith("100.185.")) h = h.replace("100.185.", "100.85.");
+        if (h && h !== "localhost" && h !== "127.0.0.1") {
           try {
-            const locRes = await fetch(`http://${activeHost}:${activePort}/api/alerts?pc_id=all&limit=150`);
+            const locRes = await fetch(`http://${h}:${p.port || 8765}/api/alerts?pc_id=all&limit=150`);
             if (locRes.ok) {
               const locData = await locRes.json();
               if (locData && Array.isArray(locData.alerts)) {
-                cachedAlerts = locData.alerts;
-                dataFetched = true;
+                const seenKeys = new Set(fetchedAlerts.map(a => `${a.pc_id || ''}_${a.event_type || ''}_${a.created_timestamp || ''}`));
+                locData.alerts.forEach(la => {
+                  const k = `${la.pc_id || ''}_${la.event_type || ''}_${la.created_timestamp || ''}`;
+                  if (!seenKeys.has(k)) {
+                    fetchedAlerts.push(la);
+                    seenKeys.add(k);
+                  }
+                });
               }
             }
           } catch(e) {}
         }
+      }
+
+      if (fetchedAlerts.length > 0) {
+        fetchedAlerts.sort((a, b) => (b.created_timestamp || 0) - (a.created_timestamp || 0));
+        cachedAlerts = fetchedAlerts;
       }
 
       renderPcFilterBar();
@@ -1545,6 +1645,14 @@
     function startConnection(pc) {
       currentConnectingPc = pc;
 
+      // Auto-correct common Tailscale typo 100.185.x.x -> 100.85.x.x
+      if (pc.host && pc.host.startsWith("100.185.")) {
+        pc.host = pc.host.replace("100.185.", "100.85.");
+        saveComputersList(savedPcs);
+        renderHomePcList();
+        showToast("💡 Auto-corrected IP from 100.185... to 100.85...");
+      }
+
       // If no PIN has been set for this PC yet, prompt user directly!
       if (!pc.pin) {
         promptForPin(pc, "🔑 Enter Verification Code", `Enter the 6-digit PIN displayed on ${pc.name} to connect:`);
@@ -1598,11 +1706,18 @@
         remoteStatusDot.style.background = "#ef4444";
         remotePingVal.innerText = "Offline";
         clearInterval(pingInterval);
-        showToast("Disconnected from remote PC.");
+        if (isAuthenticated) {
+          showToast("Session ended: Disconnected from remote PC.");
+        } else {
+          showToast(`❌ Cannot connect to ${pc.host}:${port}. Verify AnyLocal & Tailscale are running.`);
+        }
+        isAuthenticated = false;
       };
 
       ws.onerror = () => {
-        showToast(`❌ Cannot connect to ${pc.host}:${port}. Ensure AnyLocal is running.`);
+        if (!isAuthenticated) {
+          showToast(`❌ Cannot reach ${pc.host}:${port}. Ensure Tailscale is active.`);
+        }
       };
     }
 
@@ -2259,6 +2374,9 @@
     renderHomePcList();
     renderPcFilterBar();
     fetchSecurityAlerts();
+
+    // Auto-poll security alerts every 5 seconds in background
+    setInterval(fetchSecurityAlerts, 5000);
   </script>
 </body>
 </html>
