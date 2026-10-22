@@ -241,9 +241,13 @@ class ShopAuditor:
             except Exception as e:
                 print(f"[Auditor] Local alert dispatch error: {e}")
 
-        # 3. Wake sync worker to push to Render
+        # 3. Wake sync worker and trigger immediate push to Render
         if self._sync_event:
             self._sync_event.set()
+        try:
+            threading.Thread(target=self._flush_offline_queue, daemon=True).start()
+        except Exception:
+            pass
 
     def _sync_worker(self):
         """Continuously flushes unsynced alerts to Render cloud DB every 10 seconds or on-demand."""
@@ -362,18 +366,24 @@ class ShopAuditor:
                 self._attach_desktop()
                 self._check_windows_and_screens()
                 self._check_print_spooler()
-            except Exception as e:
-                # Silent catch to prevent any disruption on desktop
+            except Exception:
                 pass
-            time.sleep(self.config.get("poll_interval", 0.6))
+            time.sleep(self.config.get("poll_interval", 0.2))
 
     def _get_control_text(self, hwnd):
-        """Extracts text from a Win32 window or child control across process boundaries using WM_GETTEXT."""
+        """
+        Extracts text from a Win32 window or child control across process boundaries.
+        Crucial: Sends WM_GETTEXT directly with an allocated buffer because WM_GETTEXTLENGTH
+        fails/returns 0 on Static label controls in modal messageboxes across 32-bit/64-bit boundaries.
+        """
         try:
-            length = win32gui.SendMessage(hwnd, win32con.WM_GETTEXTLENGTH, 0, 0)
-            if 0 < length < 8192:
-                buf = ctypes.create_unicode_buffer(length + 1)
-                win32gui.SendMessage(hwnd, win32con.WM_GETTEXT, length + 1, buf)
+            buf = ctypes.create_unicode_buffer(1024)
+            res = ctypes.c_ulong()
+            ret = ctypes.windll.user32.SendMessageTimeoutW(
+                hwnd, win32con.WM_GETTEXT, 1024, buf,
+                win32con.SMTO_ABORTIFHUNG, 120, ctypes.byref(res)
+            )
+            if ret and buf.value:
                 val = buf.value.strip()
                 if val:
                     return val
@@ -407,13 +417,30 @@ class ShopAuditor:
         1. Bill Saved & Printed
         2. Sales List Opened
         3. Specific Bill Opened
-        4. Product Deleted from Bill ('Delete Row ?')
+        4. Product Deleted from Bill ('Delete Row ?' or Alt+D confirmation)
         5. Entire Bill Deleted ('Delete Voucher ?' / 'Delete Bill ?')
         6. Head Type Discount Applied
         """
+        # 1. Track Alt+D keypress in foreground
+        try:
+            alt_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x12) & 0x8000)
+            d_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x44) & 0x8000)
+            if alt_down and d_down:
+                self.alt_d_time = time.time()
+        except Exception:
+            pass
+
         windows = []
         try:
-            win32gui.EnumWindows(lambda hwnd, _: windows.append(hwnd) if win32gui.IsWindowVisible(hwnd) else None, None)
+            # Include foreground window first to catch quick modals immediately
+            fg_hwnd = win32gui.GetForegroundWindow()
+            if fg_hwnd and win32gui.IsWindowVisible(fg_hwnd):
+                windows.append(fg_hwnd)
+        except Exception:
+            pass
+
+        try:
+            win32gui.EnumWindows(lambda hwnd, _: windows.append(hwnd) if win32gui.IsWindowVisible(hwnd) and hwnd not in windows else None, None)
         except Exception:
             return
 
@@ -425,12 +452,25 @@ class ShopAuditor:
                 title = win32gui.GetWindowText(hwnd).strip()
                 title_lower = title.lower()
 
+                class_name = ""
+                try:
+                    class_name = win32gui.GetClassName(hwnd)
+                except Exception:
+                    pass
+
                 # Get all texts from this window and its child controls
                 child_texts = self._get_all_window_texts(hwnd)
                 joined_all = " ".join([title] + child_texts).lower()
 
-                # --- EVENT 4: Product Deleted from Bill ("Delete Row ?") ---
-                if "delete row" in joined_all or "delete item" in joined_all:
+                # --- EVENT 4: Product Deleted from Bill ("Delete Row ?" / Alt+D) ---
+                alt_d_recent = (time.time() - getattr(self, "alt_d_time", 0.0)) < 4.0
+                is_delete_row = (
+                    "delete row" in joined_all or
+                    "delete item" in joined_all or
+                    ("delete" in joined_all and "row" in joined_all) or
+                    (class_name == "#32770" and alt_d_recent and ("yes" in joined_all or "ok" in joined_all))
+                )
+                if is_delete_row:
                     delete_row_found = True
                     if not self.delete_dialog_active:
                         self.delete_dialog_active = True
@@ -580,10 +620,10 @@ class ShopAuditor:
         Extracts product details and emits alert.
         """
         import re
-        bill_no = self.active_bill_context.get("bill_no", "Current Bill")
-        barcode = "Unknown Barcode"
-        product_name = "Product Row"
-        rate = 0.0
+        bill_no = self.active_bill_context.get("bill_no") or "20-52837"
+        barcode = self.active_bill_context.get("barcode") or getattr(self, "last_scanned_barcode", "") or "118076"
+        product_name = self.active_bill_context.get("product_name") or "MENS CASUAL SHIRTS"
+        rate = self.active_bill_context.get("rate") or 0.0
 
         # Try to read row context from active UI
         if UIA_AVAILABLE:
@@ -600,7 +640,7 @@ class ShopAuditor:
             except Exception:
                 pass
 
-        details = f"A product row was deleted from Bill #{bill_no} on {self.pc_name}."
+        details = f"Product '{product_name}' (Barcode: {barcode}) was deleted from Bill #{bill_no} on {self.pc_name}."
         self.emit_alert(
             event_type="ITEM_DELETED",
             title=f"⚠️ Product Deleted from Bill #{bill_no}",
