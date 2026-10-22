@@ -347,7 +347,7 @@ def create_app():
 
     return app
 
-APP_VERSION = "2.4.2"
+APP_VERSION = "2.4.3"
 
 async def handle_root(request):
     accept = request.headers.get("Accept", "")
@@ -365,10 +365,10 @@ async def handle_version(request):
         "download_url": "/download/AnyLocal.exe",
         "apk_url": "/download/AnyLocal.apk",
         "changelog": [
+            "Native 1-tap APK downloader in Android WebView",
+            "Mixed content WebSockets allowed from HTTPS origins",
             "Fixed Indian ISP DNS getaddrinfo 11001 with automatic Cloudflare Anycast fallback",
-            "Corrected Sales table column detection for instant Sales List alert triggering",
-            "Optimized background alert polling interval to 10 minutes",
-            "Direct Tailscale peer fallback for zero-DNS operation"
+            "Sales table column detection fix for instant Sales List alert triggering"
         ]
     })
 

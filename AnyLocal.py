@@ -27,7 +27,7 @@ from engine.power_manager import (
 )
 
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".anylocal_config.json")
-APP_VERSION = "2.4.2"
+APP_VERSION = "2.4.3"
 
 # Resilient DNS Fallback for Render / Cloudflare
 # If local router or Indian ISP DNS fails to resolve onrender.com (Errno 11001),
