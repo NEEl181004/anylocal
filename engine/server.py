@@ -223,9 +223,65 @@ class HostServer:
                 return Response(200, "OK", headers, body)
 
         elif request.path == "/api/version":
-            body = json.dumps({"status": "ok", "version": "2.4.3", "name": "AnyLocal"}).encode("utf-8")
-            headers = Headers([("Content-Type", "application/json"), ("Access-Control-Allow-Origin", "*")])
+            body = json.dumps({
+                "status": "ok",
+                "version": "2.4.4",
+                "name": "AnyLocal",
+                "exe_url": "/download/AnyLocal.exe",
+                "apk_url": "/download/AnyLocal.apk",
+                "changelog": [
+                    "Full 6-event Quick Software security & POS audit engine",
+                    "Resilient Win32 WM_GETTEXT modal dialog detection for FoxPro",
+                    "Alt+D row delete, Ctrl+B voucher delete, Ctrl+L/R sales list triggers",
+                    "Negative discount amount parsing for 'Discount Paid' head type",
+                    "Direct Tailscale peer-to-peer sync with zero cloud dependency",
+                    "Native 1-tap in-place Android APK & Windows EXE self-updaters"
+                ]
+            }).encode("utf-8")
+            headers = Headers([
+                ("Content-Type", "application/json"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Cache-Control", "no-cache")
+            ])
             return Response(200, "OK", headers, body)
+
+        elif request.path in ("/download/AnyLocal.apk", "/download/apk"):
+            apk_candidates = [
+                Path(__file__).resolve().parent.parent / "dist" / "AnyLocal.apk",
+                Path(__file__).resolve().parent.parent / "server" / "static" / "AnyLocal.apk",
+                Path("C:/Users/Admin/Desktop/Anyserver/dist/AnyLocal.apk")
+            ]
+            for c in apk_candidates:
+                if c.exists():
+                    with open(c, "rb") as f:
+                        body = f.read()
+                    headers = Headers([
+                        ("Content-Type", "application/vnd.android.package-archive"),
+                        ("Content-Disposition", 'attachment; filename="AnyLocal.apk"'),
+                        ("Content-Length", str(len(body))),
+                        ("Access-Control-Allow-Origin", "*")
+                    ])
+                    return Response(200, "OK", headers, body)
+            return Response(404, "Not Found", Headers([("Access-Control-Allow-Origin", "*")]), b"AnyLocal.apk not found")
+
+        elif request.path in ("/download/AnyLocal.exe", "/download/exe"):
+            exe_candidates = [
+                Path(__file__).resolve().parent.parent / "dist" / "AnyLocal.exe",
+                Path(__file__).resolve().parent.parent / "server" / "static" / "AnyLocal.exe",
+                Path("C:/Users/Admin/Desktop/Anyserver/dist/AnyLocal.exe")
+            ]
+            for c in exe_candidates:
+                if c.exists():
+                    with open(c, "rb") as f:
+                        body = f.read()
+                    headers = Headers([
+                        ("Content-Type", "application/octet-stream"),
+                        ("Content-Disposition", 'attachment; filename="AnyLocal.exe"'),
+                        ("Content-Length", str(len(body))),
+                        ("Access-Control-Allow-Origin", "*")
+                    ])
+                    return Response(200, "OK", headers, body)
+            return Response(404, "Not Found", Headers([("Access-Control-Allow-Origin", "*")]), b"AnyLocal.exe not found")
 
         return None
 

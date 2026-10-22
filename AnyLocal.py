@@ -27,11 +27,9 @@ from engine.power_manager import (
 )
 
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".anylocal_config.json")
-APP_VERSION = "2.4.3"
+APP_VERSION = "2.4.4"
 
-# Resilient DNS Fallback for Render / Cloudflare
-# If local router or Indian ISP DNS fails to resolve onrender.com (Errno 11001),
-# automatically fall back to static Cloudflare Anycast IPs while preserving TLS SNI.
+# Resilient DNS Fallback for GitHub / Render / Cloudflare
 import socket
 _orig_getaddrinfo = socket.getaddrinfo
 
@@ -52,6 +50,7 @@ socket.getaddrinfo = _resilient_getaddrinfo
 def check_and_apply_auto_update(manual=False):
     """
     Downloads and applies updates ONLY when manually triggered by the user.
+    Checks GitHub Releases version.json directly, falling back to local Tailscale host.
     Never terminates or restarts sessions automatically in the background.
     """
     if not manual:
@@ -60,53 +59,46 @@ def check_and_apply_auto_update(manual=False):
     import urllib.request
     import subprocess
 
-    target_url = "https://anylocal.onrender.com"
-    try:
-        cfg = load_saved_config()
-        if "cloud_server_url" in cfg and cfg["cloud_server_url"]:
-            target_url = cfg["cloud_server_url"].rstrip('/')
-    except Exception:
-        pass
+    sources = [
+        "https://raw.githubusercontent.com/NEEl181004/anylocal/main/version.json",
+        "http://100.85.146.86:8765/api/version"
+    ]
 
-    try:
-        req = urllib.request.Request(
-            f"{target_url}/api/version",
-            headers={"User-Agent": f"AnyLocal/{APP_VERSION}"}
-        )
-        with urllib.request.urlopen(req, timeout=12.0) as resp:
-            if resp.status == 200:
-                data = json.loads(resp.read().decode("utf-8"))
-                remote_ver = data.get("version", APP_VERSION)
-                if remote_ver != APP_VERSION and getattr(sys, 'frozen', False):
-                    download_url = data.get("download_url", "/download/AnyLocal.exe")
-                    if not download_url.startswith("http"):
-                        download_url = f"{target_url}/{download_url.lstrip('/')}"
+    for src_url in sources:
+        try:
+            req = urllib.request.Request(src_url, headers={"User-Agent": f"AnyLocal/{APP_VERSION}"})
+            with urllib.request.urlopen(req, timeout=8.0) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    remote_ver = data.get("version", APP_VERSION)
+                    if remote_ver != APP_VERSION and getattr(sys, 'frozen', False):
+                        download_url = data.get("exe_url") or data.get("download_url", "http://100.85.146.86:8765/download/AnyLocal.exe")
 
-                    current_exe = sys.executable
-                    exe_dir = os.path.dirname(current_exe)
-                    temp_update_exe = os.path.join(exe_dir, "AnyLocal_update.exe")
+                        current_exe = sys.executable
+                        exe_dir = os.path.dirname(current_exe)
+                        temp_update_exe = os.path.join(exe_dir, "AnyLocal_update.exe")
 
-                    urllib.request.urlretrieve(download_url, temp_update_exe)
+                        urllib.request.urlretrieve(download_url, temp_update_exe)
 
-                    # Validate downloaded file size (> 10MB) to ensure complete download
-                    if os.path.exists(temp_update_exe) and os.path.getsize(temp_update_exe) > 10 * 1024 * 1024:
-                        bat_path = os.path.join(exe_dir, "_apply_update.bat")
-                        bat_content = f"""@echo off
+                        # Validate downloaded file size (> 10MB) to ensure complete download
+                        if os.path.exists(temp_update_exe) and os.path.getsize(temp_update_exe) > 10 * 1024 * 1024:
+                            bat_path = os.path.join(exe_dir, "_apply_update.bat")
+                            bat_content = f"""@echo off
 timeout /t 2 /nobreak >nul
 taskkill /f /im AnyLocal.exe >nul 2>&1
 move /y "{temp_update_exe}" "{current_exe}" >nul
 start "" "{current_exe}"
 del "%~f0"
 """
-                        with open(bat_path, "w") as bf:
-                            bf.write(bat_content)
+                            with open(bat_path, "w") as bf:
+                                bf.write(bat_content)
 
-                        flags = 0x08000000 if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-                        subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags)
-                        sys.exit(0)
-                        return
-    except Exception as e:
-        print(f"[AutoUpdate Error] {e}")
+                            flags = 0x08000000 if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                            subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags)
+                            sys.exit(0)
+                            return
+        except Exception as e:
+            print(f"[AutoUpdate Error from {src_url}] {e}")
 
 def generate_random_pin(length=6):
     return "".join(random.choices(string.digits, k=length))

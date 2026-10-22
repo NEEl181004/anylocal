@@ -971,16 +971,16 @@
     <div class="card" style="margin-bottom:14px;">
       <div class="card-title">Installed Version</div>
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:14px; font-weight:700; color:#fff;">v2.4.3 (Security & Audit Edition)</span>
+        <span style="font-size:14px; font-weight:700; color:#fff;">v2.4.4 (Direct Tailscale Edition)</span>
         <span style="background:#0284c7; color:#fff; font-size:10px; padding:2px 8px; border-radius:10px; font-weight:700;">PRO</span>
       </div>
     </div>
 
     <div class="card" style="margin-bottom:14px;">
-      <div class="card-title">Render Cloud Server Configuration</div>
+      <div class="card-title">Counter PC Host & Security Configuration</div>
       <div class="form-group">
-        <label class="form-label">Cloud Server URL (24/7 Relay & Database)</label>
-        <input type="text" id="cfgCloudUrl" class="input-field" placeholder="https://anylocal.onrender.com">
+        <label class="form-label">Counter PC Host (Tailscale IP / Wi-Fi)</label>
+        <input type="text" id="cfgCloudUrl" class="input-field" placeholder="http://100.85.146.86:8765">
       </div>
       <button class="btn-gradient" id="btnSaveCloudUrl" style="padding:10px; font-size:12px; margin-top:4px;">
         <span>💾 Save Server URL</span>
@@ -1465,10 +1465,10 @@
     }
 
     async function fetchSecurityAlerts() {
-      const cloudUrl = (localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").trim().replace(/\/+$/, "");
+      const cloudUrl = (localStorage.getItem("cloud_relay_url") || "http://100.85.146.86:8765").trim().replace(/\/+$/, "");
       let fetchedAlerts = [];
 
-      // 1. Fetch from Render Cloud DB (central 24/7 database)
+      // 1. Fetch from Counter Host (central Tailscale / local SQLite database)
       try {
         const res = await fetch(`${cloudUrl}/api/alerts?pc_id=all&limit=250`);
         if (res.ok) {
@@ -2331,7 +2331,7 @@
     const btnDownloadNewApk = document.getElementById("btnDownloadNewApk");
 
     document.getElementById("btnServerSettings").onclick = () => {
-      cfgCloudUrl.value = localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com";
+      cfgCloudUrl.value = localStorage.getItem("cloud_relay_url") || "http://100.85.146.86:8765";
       serverSettingsModal.style.display = "flex";
     };
 
@@ -2343,40 +2343,54 @@
       const url = cfgCloudUrl.value.trim().replace(/\/+$/, "");
       if (url) {
         localStorage.setItem("cloud_relay_url", url);
-        showToast("💾 Cloud Server URL Saved");
+        showToast("💾 Counter PC Host Saved");
       }
     };
 
     btnCheckAppUpdate.onclick = async () => {
-      const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").replace(/\/+$/, "");
-      appUpdateStatus.innerHTML = `<span style="color:#38bdf8;">Connecting to ${targetUrl}/api/version...</span>`;
+      const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "http://100.85.146.86:8765").replace(/\/+$/, "");
+      appUpdateStatus.innerHTML = `<span style="color:#38bdf8;">Checking for updates via GitHub & Counter PC...</span>`;
+
+      let updateData = null;
+      // 1. Check GitHub Releases version.json
       try {
-        const res = await fetch(`${targetUrl}/api/version`);
-        if (res.ok) {
-          const data = await res.json();
-          const remoteVer = data.version || "2.4.2";
-          if (remoteVer !== "2.4.2") {
-            appUpdateStatus.innerHTML = `
-              <div style="color:#facc15; font-weight:700; margin-bottom:6px;">🎉 New Update Available: v${remoteVer}!</div>
-              <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">• ${(data.changelog || []).join('<br>• ')}</div>
-            `;
-            const apkLink = `${targetUrl}/download/AnyLocal.apk`;
-            btnDownloadNewApk.onclick = () => {
-              window.location.href = apkLink;
-            };
-            btnDownloadNewApk.style.display = "block";
-          } else {
-            appUpdateStatus.innerHTML = `<span style="color:#22c55e; font-weight:700;">✅ You are running the latest version (v2.4.2)!</span>`;
-            btnDownloadNewApk.style.display = "none";
-          }
-        } else {
-          appUpdateStatus.innerHTML = `<span style="color:#f87171;">⚠️ Server returned HTTP ${res.status}.</span>`;
+        const ghRes = await fetch("https://raw.githubusercontent.com/NEEl181004/anylocal/main/version.json", { cache: "no-store" });
+        if (ghRes.ok) {
+          updateData = await ghRes.json();
         }
-      } catch (err) {
+      } catch (e) {}
+
+      // 2. Fallback to Counter PC /api/version
+      if (!updateData) {
+        try {
+          const pcRes = await fetch(`${targetUrl}/api/version`, { cache: "no-store" });
+          if (pcRes.ok) {
+            updateData = await pcRes.json();
+          }
+        } catch (e) {}
+      }
+
+      if (updateData) {
+        const remoteVer = updateData.version || "2.4.4";
+        if (remoteVer !== "2.4.4") {
+          appUpdateStatus.innerHTML = `
+            <div style="color:#facc15; font-weight:700; margin-bottom:6px;">🎉 New Update Available: v${remoteVer}!</div>
+            <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">• ${(updateData.changelog || []).join('<br>• ')}</div>
+          `;
+          const apkLink = updateData.apk_url || `${targetUrl}/download/AnyLocal.apk`;
+          btnDownloadNewApk.onclick = () => {
+            triggerApkDownload(apkLink);
+          };
+          btnDownloadNewApk.style.display = "block";
+        } else {
+          appUpdateStatus.innerHTML = `<span style="color:#22c55e; font-weight:700;">✅ You are running the latest version (v2.4.4)!</span>`;
+          btnDownloadNewApk.style.display = "none";
+        }
+      } else {
         appUpdateStatus.innerHTML = `
-          <div style="color:#f87171; margin-bottom:8px;">⚠️ Could not connect to server at ${targetUrl}.<br>Error: ${err.message}</div>
+          <div style="color:#f87171; margin-bottom:8px;">⚠️ Could not check for updates right now.</div>
           <div style="font-size:11px; color:#94a3b8; line-height:1.4;">
-            💡 <b>Tip:</b> If your mobile network blocks Render, you can enter your Admin PC Tailscale IP in the box above (e.g. <code>http://100.124.156.21:8765</code>) and tap <b>Save Server URL</b>.
+            Ensure phone has internet or Tailscale connection to your Counter PC (<code>http://100.85.146.86:8765</code>).
           </div>
         `;
       }

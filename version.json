@@ -1,0 +1,16 @@
+{
+  "version": "2.4.4",
+  "release_date": "2026-10-22",
+  "exe_url": "https://github.com/NEEl181004/anylocal/releases/download/v2.4.4/AnyLocal.exe",
+  "apk_url": "https://github.com/NEEl181004/anylocal/releases/download/v2.4.4/AnyLocal.apk",
+  "tailscale_counter_ip": "100.85.146.86",
+  "tailscale_port": 8765,
+  "changelog": [
+    "Full 6-event Quick Software security & POS audit engine",
+    "Resilient Win32 WM_GETTEXT modal dialog detection for Visual FoxPro",
+    "Alt+D row delete, Ctrl+B voucher delete, Ctrl+L/R sales list triggers",
+    "Negative discount amount parsing for 'Discount Paid' head type",
+    "Direct Tailscale peer-to-peer sync with zero cloud dependency",
+    "Native 1-tap in-place Android APK & Windows EXE self-updaters"
+  ]
+}

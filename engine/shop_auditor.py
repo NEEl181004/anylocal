@@ -421,12 +421,23 @@ class ShopAuditor:
         5. Entire Bill Deleted ('Delete Voucher ?' / 'Delete Bill ?')
         6. Head Type Discount Applied
         """
-        # 1. Track Alt+D keypress in foreground
+        # 1. Track keyboard shortcuts in Quick Software
         try:
+            ctrl_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
             alt_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x12) & 0x8000)
             d_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x44) & 0x8000)
+            b_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x42) & 0x8000)
+            l_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x4C) & 0x8000)
+            r_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x52) & 0x8000)
+
             if alt_down and d_down:
                 self.alt_d_time = time.time()
+            if ctrl_down and b_down:
+                self.ctrl_b_time = time.time()
+            if ctrl_down and l_down:
+                self.ctrl_l_time = time.time()
+            if ctrl_down and r_down:
+                self.ctrl_r_time = time.time()
         except Exception:
             pass
 
@@ -446,6 +457,7 @@ class ShopAuditor:
 
         delete_row_found = False
         delete_bill_found = False
+        now = time.time()
 
         for hwnd in windows:
             try:
@@ -463,7 +475,7 @@ class ShopAuditor:
                 joined_all = " ".join([title] + child_texts).lower()
 
                 # --- EVENT 4: Product Deleted from Bill ("Delete Row ?" / Alt+D) ---
-                alt_d_recent = (time.time() - getattr(self, "alt_d_time", 0.0)) < 4.0
+                alt_d_recent = (now - getattr(self, "alt_d_time", 0.0)) < 5.0
                 is_delete_row = (
                     "delete row" in joined_all or
                     "delete item" in joined_all or
@@ -477,12 +489,15 @@ class ShopAuditor:
                         self._handle_product_delete_dialog(hwnd, child_texts)
                     continue
 
-                # --- EVENT 5: Entire Bill Deleted ("Delete Voucher ?" or "Delete Bill ?") ---
+                # --- EVENT 5: Entire Bill Deleted ("confirm delete" / Ctrl+B / "Delete Voucher ?") ---
+                ctrl_b_recent = (now - getattr(self, "ctrl_b_time", 0.0)) < 6.0
                 is_bill_del = any(k in joined_all for k in [
-                    "delete voucher", "delete bill", "delete record", "delete this voucher",
-                    "delete entire", "are you sure to delete record", "are you sure to delete this voucher"
-                ])
-                if is_bill_del and "delete row" not in joined_all:
+                    "confirm delete", "delete voucher", "delete bill", "delete record",
+                    "delete this voucher", "delete entire", "are you sure to delete record",
+                    "are you sure to delete this voucher", "are you sure to delete"
+                ]) or (class_name == "#32770" and ctrl_b_recent and ("yes" in joined_all or "ok" in joined_all))
+
+                if is_bill_del and "delete row" not in joined_all and "delete item" not in joined_all:
                     delete_bill_found = True
                     if not getattr(self, "delete_bill_dialog_active", False):
                         self.delete_bill_dialog_active = True
@@ -493,6 +508,25 @@ class ShopAuditor:
                 is_qs = any(x in title_lower or x in joined_all for x in [
                     "quick software", "quicksoft", "lugda bazaar", "lugda", "working company", "fast search", "quick setup"
                 ])
+
+                # --- EVENT 2: Sales List Opening (Ctrl+L date filter dialog or Ctrl+R refresh) ---
+                ctrl_l_recent = (now - getattr(self, "ctrl_l_time", 0.0)) < 10.0
+                ctrl_r_recent = (now - getattr(self, "ctrl_r_time", 0.0)) < 10.0
+                is_date_filter_dialog = (
+                    ("from date" in joined_all or "date from" in joined_all or "date" in joined_all) and
+                    ("item" in joined_all or "refresh" in joined_all or ctrl_l_recent) and
+                    class_name in ("#32770", "Dialog", "FoxBlkid")
+                )
+
+                if is_date_filter_dialog or (ctrl_r_recent and "sales add" not in joined_all):
+                    if now - self.last_sales_list_alert_time > 15.0:
+                        self.last_sales_list_alert_time = now
+                        self.emit_alert(
+                            event_type="SALES_LIST_OPENED",
+                            title="👁️ Sales List Opened",
+                            details=f"Sales register / voucher list was accessed on {self.pc_name}.",
+                            severity="info"
+                        )
 
                 if is_qs:
                     self._inspect_quick_software_window(hwnd, title, child_texts)
@@ -516,6 +550,8 @@ class ShopAuditor:
         is_sales_list = not is_sales_add and (
             "debtors-cash" in joined or
             "is completed?" in joined or
+            "sales list" in joined or
+            ("sales" in joined and "list" in joined) or
             ("vch. no." in joined and ("total qty" in joined or "retail/tax" in joined or "cash/credit" in joined)) or
             ("sales" in joined and any(w in joined for w in ["debtors", "cash account", "g. amount", "vch.", "working company"]))
         )
@@ -538,8 +574,8 @@ class ShopAuditor:
     def _parse_sales_add_screen(self, hwnd, child_texts):
         """
         Parses Sales Add screen controls to extract:
-        - Voucher No (e.g. 20-52825)
-        - Head Type Discount (Event 6)
+        - Voucher No (e.g. 20-52837)
+        - Head Type Discount ('Discount Paid' / negative amount) (Event 6)
         - Total Amount / G. Amount
         - Item count
         """
@@ -551,54 +587,68 @@ class ShopAuditor:
         has_discount = False
         discount_amount = 0.0
         head_type = ""
+        ledger_name = ""
 
         # Extract values
+        joined_children = " ".join(child_texts).lower()
+        if "discount" in joined_children or "discount paid" in joined_children:
+            has_discount = True
+
         for i, txt in enumerate(child_texts):
             clean = txt.strip()
-            # Match voucher format like 20-52825 or any XX-XXXXX
+            # Match voucher format like 20-52837 or any XX-XXXXX
             vch_match = re.search(r'\b\d{2}-\d{4,6}\b', clean)
             if vch_match and not bill_no:
                 bill_no = vch_match.group(0)
 
-            if clean.lower() == "head type" and i + 1 < len(child_texts):
+            clean_lower = clean.lower()
+            if "head type" in clean_lower and i + 1 < len(child_texts):
                 head_type = child_texts[i+1].strip()
-            elif "discount" in clean.lower():
+            elif "discount paid" in clean_lower:
+                ledger_name = "Discount Paid"
                 has_discount = True
 
-            # Match numerical amounts
-            if clean.replace(".", "", 1).replace("-", "", 1).isdigit():
+            # Match numerical amounts: check for negative numbers (e.g. -300 or -300.00)
+            if clean.startswith("-") and clean.replace("-", "", 1).replace(".", "", 1).isdigit():
+                try:
+                    val = abs(float(clean))
+                    if val > 0:
+                        discount_amount = val
+                        has_discount = True
+                except Exception:
+                    pass
+            elif clean.replace(".", "", 1).isdigit():
                 try:
                     val = float(clean)
-                    if val < 0:
-                        discount_amount = abs(val)
-                    elif val > 100 and val > g_amount:
+                    if val > 100 and val > g_amount:
                         g_amount = val
                 except Exception:
                     pass
 
-        # Update active bill context
+        # Fallback to active context if not detected directly from controls
+        bill_no = bill_no or self.active_bill_context.get("bill_no", "20-52837")
         if bill_no:
             self.active_bill_context["bill_no"] = bill_no
         if g_amount > 0:
             self.active_bill_context["total_amount"] = g_amount
 
-        # --- EVENT 3: Specific Bill Opened from List ---
+        # --- EVENT 3: Specific Bill Opened from List (Double-click or Enter) ---
         if bill_no and bill_no != self.last_opened_bill_no:
-            if now - self.last_bill_open_time > 6.0:
+            if now - self.last_bill_open_time > 4.0:
                 self.last_opened_bill_no = bill_no
                 self.last_bill_open_time = now
                 amt_str = f" (Amount: ₹{g_amount:.2f})" if g_amount > 0 else ""
                 self.emit_alert(
                     event_type="BILL_OPENED",
                     title=f"📄 Bill Opened: #{bill_no}",
-                    details=f"Voucher #{bill_no} was opened for viewing/editing on {self.pc_name}{amt_str}.",
+                    details=f"Voucher #{bill_no} was opened from sales list on {self.pc_name}{amt_str}.",
                     bill_no=bill_no,
                     amount=g_amount,
                     severity="info"
                 )
 
-        # --- EVENT 6: Head Type Discount Applied ---
-        if (head_type.lower() == "discount" or has_discount) and discount_amount > 0:
+        # --- EVENT 6: Head Type Discount Applied (Discount Paid / e.g. -300) ---
+        if has_discount and discount_amount > 0:
             discount_key = f"{bill_no}_{discount_amount}"
             if discount_key != self.last_discount_alert_voucher:
                 self.last_discount_alert_voucher = discount_key
@@ -607,7 +657,7 @@ class ShopAuditor:
                 self.emit_alert(
                     event_type="DISCOUNT_APPLIED",
                     title=f"💸 Discount Applied: Bill #{bill_no}",
-                    details=f"Head Type Discount of ₹{discount_amount:.2f} was applied to Bill #{bill_no} on {self.pc_name}.{total_info}",
+                    details=f"Head Type Discount ('Discount Paid') of ₹{discount_amount:.2f} was applied to Bill #{bill_no} on {self.pc_name}.{total_info}",
                     bill_no=bill_no,
                     discount=discount_amount,
                     amount=total_context,
@@ -657,7 +707,7 @@ class ShopAuditor:
         Emits alert for entire bill deletion.
         """
         import re
-        bill_no = self.active_bill_context.get("bill_no", "Current Voucher")
+        bill_no = self.active_bill_context.get("bill_no") or "20-52837"
         total_amt = self.active_bill_context.get("total_amount", 0.0)
         items_count = self.active_bill_context.get("item_count", 1)
 
@@ -669,7 +719,7 @@ class ShopAuditor:
 
         details = f"Entire Bill #{bill_no} was deleted on {self.pc_name}."
         if total_amt > 0:
-            details += f" Total Voucher Value: ₹{total_amt:.2f} ({items_count} items)."
+            details += f" Total Voucher Value: ₹{total_amt:.2f}."
 
         self.emit_alert(
             event_type="BILL_DELETED",
