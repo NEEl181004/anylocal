@@ -156,6 +156,14 @@ class ShopAuditor:
         }
         self.delete_dialog_active = False
         self.last_discount_alert_voucher = ""
+        self.date_filter_dialog_hwnd = None
+        self.date_filter_dialog_open = False
+        self.date_filter_dialog_time = 0.0
+        self.refresh_triggered_time = 0.0
+        self.ctrl_l_time = 0.0
+        self.ctrl_r_time = 0.0
+        self.ctrl_b_time = 0.0
+        self.alt_d_time = 0.0
 
     def refresh_identity(self):
         """Reloads PC name and config from ~/.anylocal_config.json dynamically."""
@@ -421,7 +429,7 @@ class ShopAuditor:
         5. Entire Bill Deleted ('Delete Voucher ?' / 'Delete Bill ?')
         6. Head Type Discount Applied
         """
-        # 1. Track keyboard shortcuts in Quick Software
+        # 1. Track keyboard shortcuts and mouse clicks in Quick Software
         try:
             ctrl_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
             alt_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x12) & 0x8000)
@@ -429,6 +437,7 @@ class ShopAuditor:
             b_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x42) & 0x8000)
             l_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x4C) & 0x8000)
             r_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x52) & 0x8000)
+            lbutton_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x01) & 0x8000)
 
             if alt_down and d_down:
                 self.alt_d_time = time.time()
@@ -438,6 +447,26 @@ class ShopAuditor:
                 self.ctrl_l_time = time.time()
             if ctrl_down and r_down:
                 self.ctrl_r_time = time.time()
+                self.refresh_triggered_time = time.time()
+
+            # Mouse click tracking for Refresh button
+            if lbutton_down:
+                pt = win32gui.GetCursorPos()
+                clicked_hwnd = win32gui.WindowFromPoint(pt)
+                if clicked_hwnd:
+                    clicked_txt = self._get_control_text(clicked_hwnd).lower()
+                    if "refresh" in clicked_txt:
+                        self.refresh_triggered_time = time.time()
+                    elif getattr(self, "date_filter_dialog_hwnd", None):
+                        try:
+                            # Check if click is inside the date filter dialog (especially lower half where Refresh button sits at bottom)
+                            rect = win32gui.GetWindowRect(self.date_filter_dialog_hwnd)
+                            if rect[0] <= pt[0] <= rect[2] and rect[1] <= pt[1] <= rect[3]:
+                                h = rect[3] - rect[1]
+                                if pt[1] >= (rect[1] + h * 0.40):
+                                    self.refresh_triggered_time = time.time()
+                        except Exception:
+                            pass
         except Exception:
             pass
 
@@ -455,6 +484,7 @@ class ShopAuditor:
         except Exception:
             return
 
+        date_dlg_found = False
         delete_row_found = False
         delete_bill_found = False
         now = time.time()
@@ -505,13 +535,16 @@ class ShopAuditor:
                     continue
 
                 # --- QUICK SOFTWARE MAIN WINDOW INSPECTION ---
+                is_sales_add = "sales add" in joined_all
                 is_qs = any(x in title_lower or x in joined_all for x in [
                     "quick software", "quicksoft", "lugda bazaar", "lugda", "working company", "fast search", "quick setup"
                 ])
 
-                # --- EVENT 2: Sales List Opening (Ctrl+L date filter dialog or Refresh button click / Ctrl+R) ---
-                ctrl_l_recent = (now - getattr(self, "ctrl_l_time", 0.0)) < 12.0
-                ctrl_r_recent = (now - getattr(self, "ctrl_r_time", 0.0)) < 12.0
+                # --- EVENT 2: Sales List Opening (Date Filter Dialog -> Refresh Button click or Ctrl+R) ---
+                ctrl_l_recent = (now - getattr(self, "ctrl_l_time", 0.0)) < 15.0
+                refresh_recent = (now - getattr(self, "refresh_triggered_time", 0.0)) < 10.0
+                ctrl_r_recent = (now - getattr(self, "ctrl_r_time", 0.0)) < 10.0
+
                 is_date_filter_dialog = (
                     ("from date" in joined_all or "date from" in joined_all or ("from" in joined_all and "to" in joined_all)) and
                     ("refresh" in joined_all or "item" in joined_all or ctrl_l_recent) and
@@ -519,17 +552,28 @@ class ShopAuditor:
                 )
 
                 if is_date_filter_dialog:
+                    date_dlg_found = True
+                    self.date_filter_dialog_hwnd = hwnd
                     self.date_filter_dialog_time = now
+                    self.date_filter_dialog_open = True
 
-                was_in_date_dialog = (now - getattr(self, "date_filter_dialog_time", 0.0)) < 10.0
+                # Check if Sales List grid is visible (not sales add, not inside date filter dialog)
+                is_sales_list = not is_sales_add and not is_date_filter_dialog and (
+                    "debtors-cash" in joined_all or
+                    "is completed?" in joined_all or
+                    "sales list" in joined_all or
+                    ("sales" in joined_all and "list" in joined_all) or
+                    ("vch. no." in joined_all and any(w in joined_all for w in ["total qty", "retail/tax", "cash/credit", "g. amount"])) or
+                    ((refresh_recent or ctrl_r_recent) and "sales" in joined_all and "working company" in joined_all)
+                )
 
-                if (ctrl_r_recent or was_in_date_dialog) and not is_sales_add and "sales" in joined_all:
-                    if now - self.last_sales_list_alert_time > 12.0:
+                if is_sales_list or (refresh_recent and not is_sales_add and not is_date_filter_dialog and is_qs):
+                    if now - self.last_sales_list_alert_time > 10.0:
                         self.last_sales_list_alert_time = now
                         self.emit_alert(
                             event_type="SALES_LIST_OPENED",
                             title="👁️ Sales List Opened",
-                            details=f"Sales register / voucher list was accessed on {self.pc_name}.",
+                            details=f"Sales register / voucher list was opened on {self.pc_name} (via Refresh button / Ctrl+R).",
                             severity="info"
                         )
 
@@ -538,6 +582,11 @@ class ShopAuditor:
 
             except Exception:
                 pass
+
+        # Reset date dialog state when it closes
+        if getattr(self, "date_filter_dialog_open", False) and not date_dlg_found:
+            self.date_filter_dialog_open = False
+            self.date_filter_dialog_hwnd = None
 
         # Reset modal state when dialog closes
         if self.delete_dialog_active and not delete_row_found:
@@ -550,26 +599,27 @@ class ShopAuditor:
         now = time.time()
         joined = " ".join([title] + child_texts).lower()
 
-        # Check if Sales Add screen or Sales List screen
         is_sales_add = "sales add" in joined
-        is_sales_list = not is_sales_add and (
+        date_dlg_open = getattr(self, "date_filter_dialog_open", False)
+        refresh_recent = (now - getattr(self, "refresh_triggered_time", 0.0)) < 10.0
+
+        is_sales_list = not is_sales_add and not date_dlg_open and (
             "debtors-cash" in joined or
             "is completed?" in joined or
             "sales list" in joined or
             ("sales" in joined and "list" in joined) or
-            ("vch. no." in joined and ("total qty" in joined or "retail/tax" in joined or "cash/credit" in joined)) or
-            ("sales" in joined and any(w in joined for w in ["debtors", "cash account", "g. amount", "vch.", "working company"])) or
-            ((now - getattr(self, "date_filter_dialog_time", 0.0) < 10.0) and not is_sales_add)
+            ("vch. no." in joined and any(w in joined for w in ["total qty", "retail/tax", "cash/credit", "g. amount"])) or
+            (refresh_recent and "sales" in joined and any(w in joined for w in ["debtors", "cash account", "g. amount", "vch.", "working company"]))
         )
 
         # --- EVENT 2: Sales List Opened ---
-        if is_sales_list and not is_sales_add:
-            if now - self.last_sales_list_alert_time > 12.0:  # Debounce 12s
+        if is_sales_list and not is_sales_add and not date_dlg_open:
+            if now - self.last_sales_list_alert_time > 10.0:  # Debounce 10s
                 self.last_sales_list_alert_time = now
                 self.emit_alert(
                     event_type="SALES_LIST_OPENED",
                     title="👁️ Sales List Opened",
-                    details=f"Sales register / voucher list was accessed on {self.pc_name}.",
+                    details=f"Sales register / voucher list was accessed on {self.pc_name} (via Refresh button / Ctrl+R).",
                     severity="info"
                 )
 
