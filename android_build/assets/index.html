@@ -2375,8 +2375,8 @@
     renderPcFilterBar();
     fetchSecurityAlerts();
 
-    // Auto-poll security alerts every 5 seconds in background
-    setInterval(fetchSecurityAlerts, 5000);
+    // Auto-poll security alerts every 10 minutes in background (avoids screen glitches)
+    setInterval(fetchSecurityAlerts, 10 * 60 * 1000);
   </script>
 </body>
 </html>
