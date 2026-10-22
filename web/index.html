@@ -995,11 +995,14 @@
       <button class="btn-gradient" id="btnCheckAppUpdate">
         <span>🔄 Check for Updates Now</span>
       </button>
-      <button class="btn-gradient" id="btnDownloadNewApk" style="background:#16a34a; margin-top:10px; display:none;">
-        <span>⬇️ Download & Install New AnyLocal.apk</span>
+      <button class="btn-gradient" id="btnDownloadNewApk" style="background:#16a34a; margin-top:10px;">
+        <span>⬇️ Download AnyLocal.apk (Direct 1-Tap)</span>
       </button>
       <button class="btn-gradient" id="btnPullLiveWeb" style="background:#0284c7; margin-top:10px;">
         <span>🌐 Load Live Web UI from Render (Instant Pull)</span>
+      </button>
+      <button class="btn-gradient" id="btnReturnToLocal" style="background:#475569; margin-top:10px; display:none;">
+        <span>📱 Return to Offline App (file://)</span>
       </button>
     </div>
   </div>
@@ -1675,7 +1678,11 @@
       try {
         ws = new WebSocket(wsUrl);
       } catch(e) {
-        showToast(`❌ Connection Error: ${e.message}`);
+        if (window.location.protocol === "https:") {
+          showToast("⚠️ HTTPS Block: Browsers block connecting to local ws:// IPs from HTTPS. Open AnyLocal APK or return to file:// mode.");
+        } else {
+          showToast(`❌ Connection Error: ${e.message}`);
+        }
         return;
       }
       ws.binaryType = "arraybuffer";
@@ -2374,6 +2381,35 @@
         `;
       }
     };
+
+    function triggerApkDownload(apkUrl) {
+      showToast("⬇️ Starting AnyLocal.apk download...");
+      try {
+        const a = document.createElement("a");
+        a.href = apkUrl;
+        a.download = "AnyLocal.apk";
+        a.target = "_blank";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch(e) {}
+      setTimeout(() => {
+        window.location.href = apkUrl;
+      }, 200);
+    }
+
+    btnDownloadNewApk.onclick = () => {
+      const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").replace(/\/+$/, "");
+      triggerApkDownload(`${targetUrl}/download/AnyLocal.apk`);
+    };
+
+    const btnReturnToLocal = document.getElementById("btnReturnToLocal");
+    if (window.location.protocol === "https:" && btnReturnToLocal) {
+      btnReturnToLocal.style.display = "block";
+      btnReturnToLocal.onclick = () => {
+        window.location.href = "file:///android_asset/index.html";
+      };
+    }
 
     const btnPullLiveWeb = document.getElementById("btnPullLiveWeb");
     if (btnPullLiveWeb) {
