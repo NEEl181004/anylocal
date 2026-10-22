@@ -332,7 +332,7 @@ def create_app():
 
     app.middlewares.append(cors_middleware)
 
-    app.router.add_get("/", handle_health)
+    app.router.add_get("/", handle_root)
     app.router.add_get("/api/health", handle_health)
     app.router.add_get("/api/version", handle_version)
     app.router.add_get("/download/AnyLocal.exe", handle_download_exe)
@@ -347,7 +347,16 @@ def create_app():
 
     return app
 
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.4.2"
+
+async def handle_root(request):
+    accept = request.headers.get("Accept", "")
+    html_path = os.path.join(os.path.dirname(__file__), "..", "web", "index.html")
+    if os.path.exists(html_path) and ("text/html" in accept or "*/*" in accept):
+        with open(html_path, "rb") as f:
+            content = f.read()
+        return web.Response(body=content, content_type="text/html", headers={"Cache-Control": "no-cache"})
+    return await handle_health(request)
 
 async def handle_version(request):
     return web.json_response({
@@ -356,10 +365,10 @@ async def handle_version(request):
         "download_url": "/download/AnyLocal.exe",
         "apk_url": "/download/AnyLocal.apk",
         "changelog": [
-            "Dynamic PC branch discovery (Bhuj, Mandvi, etc. replacing PC A/B)",
-            "Local offline SQLite queue with auto-sync on reconnect (zero alert loss)",
-            "Pre-connection 24/7 alert capture to central DB before adding to phone",
-            "Real-time push alert broadcast across multiple phones simultaneously"
+            "Fixed Indian ISP DNS getaddrinfo 11001 with automatic Cloudflare Anycast fallback",
+            "Corrected Sales table column detection for instant Sales List alert triggering",
+            "Optimized background alert polling interval to 10 minutes",
+            "Direct Tailscale peer fallback for zero-DNS operation"
         ]
     })
 

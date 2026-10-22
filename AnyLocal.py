@@ -27,7 +27,27 @@ from engine.power_manager import (
 )
 
 CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".anylocal_config.json")
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.4.2"
+
+# Resilient DNS Fallback for Render / Cloudflare
+# If local router or Indian ISP DNS fails to resolve onrender.com (Errno 11001),
+# automatically fall back to static Cloudflare Anycast IPs while preserving TLS SNI.
+import socket
+_orig_getaddrinfo = socket.getaddrinfo
+
+def _resilient_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    try:
+        return _orig_getaddrinfo(host, port, family, type, proto, flags)
+    except (socket.gaierror, OSError):
+        if isinstance(host, str) and ("onrender.com" in host.lower() or host.lower() == "anylocal.onrender.com"):
+            for cf_ip in ("216.24.57.16", "216.24.57.18"):
+                try:
+                    return _orig_getaddrinfo(cf_ip, port, family, type, proto, flags)
+                except Exception:
+                    pass
+        raise
+
+socket.getaddrinfo = _resilient_getaddrinfo
 
 def check_and_apply_auto_update(manual=False):
     """
@@ -53,7 +73,7 @@ def check_and_apply_auto_update(manual=False):
             f"{target_url}/api/version",
             headers={"User-Agent": f"AnyLocal/{APP_VERSION}"}
         )
-        with urllib.request.urlopen(req, timeout=5.0) as resp:
+        with urllib.request.urlopen(req, timeout=12.0) as resp:
             if resp.status == 200:
                 data = json.loads(resp.read().decode("utf-8"))
                 remote_ver = data.get("version", APP_VERSION)
@@ -1496,7 +1516,7 @@ class AnyLocalApp:
             try:
                 import urllib.request
                 req = urllib.request.Request(f"{target_url}/api/version", headers={"User-Agent": f"AnyLocal/{APP_VERSION}"})
-                with urllib.request.urlopen(req, timeout=4.0) as resp:
+                with urllib.request.urlopen(req, timeout=12.0) as resp:
                     if resp.status == 200:
                         data = json.loads(resp.read().decode("utf-8"))
                         r_ver = data.get("version", APP_VERSION)
@@ -1516,7 +1536,14 @@ class AnyLocalApp:
                     else:
                         lbl_update_status.config(text=f"⚠️ Server returned status {resp.status}.", fg="#f87171")
             except Exception as e:
-                lbl_update_status.config(text=f"⚠️ Could not reach server at {target_url}\nError: {e}\n(Ensure Render service is active)", fg="#f87171")
+                err_msg = str(e)
+                if "11001" in err_msg or "getaddrinfo" in err_msg:
+                    err_hint = "Shop DNS cannot resolve domain. Ensure PC has internet access or set Cloud URL to your direct Tailscale IP."
+                elif "timed out" in err_msg:
+                    err_hint = "Request timed out. Server may be spinning up from cold start; try again in a few seconds."
+                else:
+                    err_hint = "Ensure Render service is active or try direct Tailscale IP."
+                lbl_update_status.config(text=f"⚠️ Could not reach server at {target_url}\nError: {e}\n({err_hint})", fg="#f87171")
 
         btn_check = tk.Button(c3, text="🔄 Check for Updates Now", bg="#0284c7", fg="#ffffff", font=("Segoe UI", 9, "bold"), relief=tk.FLAT, padx=12, pady=5, command=do_check_update)
         btn_check.pack(anchor="w")

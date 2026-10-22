@@ -971,7 +971,7 @@
     <div class="card" style="margin-bottom:14px;">
       <div class="card-title">Installed Version</div>
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:14px; font-weight:700; color:#fff;">v2.4.1 (Security & Audit Edition)</span>
+        <span style="font-size:14px; font-weight:700; color:#fff;">v2.4.2 (Security & Audit Edition)</span>
         <span style="background:#0284c7; color:#fff; font-size:10px; padding:2px 8px; border-radius:10px; font-weight:700;">PRO</span>
       </div>
     </div>
@@ -1582,9 +1582,6 @@
         try { navigator.vibrate([100, 50, 100]); } catch(e) {}
       }
     }
-
-    // Auto-poll alerts every 6 seconds
-    setInterval(fetchSecurityAlerts, 6000);
 
     document.getElementById("btnAddPcShortcut").onclick = () => {
       tabDirectConnect.click();
@@ -2350,8 +2347,8 @@
         const res = await fetch(`${targetUrl}/api/version`);
         if (res.ok) {
           const data = await res.json();
-          const remoteVer = data.version || "2.4.1";
-          if (remoteVer !== "2.4.1") {
+          const remoteVer = data.version || "2.4.2";
+          if (remoteVer !== "2.4.2") {
             appUpdateStatus.innerHTML = `
               <div style="color:#facc15; font-weight:700; margin-bottom:6px;">🎉 New Update Available: v${remoteVer}!</div>
               <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">• ${(data.changelog || []).join('<br>• ')}</div>
@@ -2362,14 +2359,19 @@
             };
             btnDownloadNewApk.style.display = "block";
           } else {
-            appUpdateStatus.innerHTML = `<span style="color:#22c55e; font-weight:700;">✅ You are running the latest version (v2.4.1)!</span>`;
+            appUpdateStatus.innerHTML = `<span style="color:#22c55e; font-weight:700;">✅ You are running the latest version (v2.4.2)!</span>`;
             btnDownloadNewApk.style.display = "none";
           }
         } else {
           appUpdateStatus.innerHTML = `<span style="color:#f87171;">⚠️ Server returned HTTP ${res.status}.</span>`;
         }
       } catch (err) {
-        appUpdateStatus.innerHTML = `<span style="color:#f87171;">⚠️ Could not connect to Render server at ${targetUrl}.<br>Error: ${err.message}</span>`;
+        appUpdateStatus.innerHTML = `
+          <div style="color:#f87171; margin-bottom:8px;">⚠️ Could not connect to server at ${targetUrl}.<br>Error: ${err.message}</div>
+          <div style="font-size:11px; color:#94a3b8; line-height:1.4;">
+            💡 <b>Tip:</b> If your mobile network blocks Render, you can enter your Admin PC Tailscale IP in the box above (e.g. <code>http://100.124.156.21:8765</code>) and tap <b>Save Server URL</b>.
+          </div>
+        `;
       }
     };
 

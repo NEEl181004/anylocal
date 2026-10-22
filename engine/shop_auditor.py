@@ -26,6 +26,23 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
+# Resilient DNS fallback for Render / Cloudflare
+_orig_auditor_getaddrinfo = socket.getaddrinfo
+
+def _resilient_auditor_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    try:
+        return _orig_auditor_getaddrinfo(host, port, family, type, proto, flags)
+    except (socket.gaierror, OSError):
+        if isinstance(host, str) and ("onrender.com" in host.lower() or host.lower() == "anylocal.onrender.com"):
+            for cf_ip in ("216.24.57.16", "216.24.57.18"):
+                try:
+                    return _orig_auditor_getaddrinfo(cf_ip, port, family, type, proto, flags)
+                except Exception:
+                    pass
+        raise
+
+socket.getaddrinfo = _resilient_auditor_getaddrinfo
+
 # Win32 APIs
 try:
     import ctypes
