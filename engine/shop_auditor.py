@@ -254,6 +254,16 @@ class ShopAuditor:
                 LIMIT 50
             """)
             rows = cur.fetchall()
+            if not rows:
+                # Re-sync recent alerts from last 24h to ensure Render DB stays hydrated across redeployments
+                cutoff_recent = time.time() - 86400
+                cur.execute("""
+                    SELECT * FROM offline_alerts
+                    WHERE created_timestamp >= ?
+                    ORDER BY created_timestamp DESC
+                    LIMIT 20
+                """, (cutoff_recent,))
+                rows = cur.fetchall()
             conn.close()
         except Exception:
             return
@@ -446,7 +456,12 @@ class ShopAuditor:
 
         # Check if Sales Add screen or Sales List screen
         is_sales_add = "sales add" in joined
-        is_sales_list = ("sales" in joined and not is_sales_add and "sales man" not in joined) or ("vch. no." in joined and "g. amount" in joined and not is_sales_add)
+        is_sales_list = not is_sales_add and (
+            "debtors-cash" in joined or
+            "is completed?" in joined or
+            ("vch. no." in joined and ("total qty" in joined or "retail/tax" in joined or "cash/credit" in joined)) or
+            ("sales" in joined and any(w in joined for w in ["debtors", "cash account", "g. amount", "vch.", "working company"]))
+        )
 
         # --- EVENT 2: Sales List Opened ---
         if is_sales_list and not is_sales_add:

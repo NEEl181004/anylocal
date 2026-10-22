@@ -998,6 +998,9 @@
       <button class="btn-gradient" id="btnDownloadNewApk" style="background:#16a34a; margin-top:10px; display:none;">
         <span>⬇️ Download & Install New AnyLocal.apk</span>
       </button>
+      <button class="btn-gradient" id="btnPullLiveWeb" style="background:#0284c7; margin-top:10px;">
+        <span>🌐 Load Live Web UI from Render (Instant Pull)</span>
+      </button>
     </div>
   </div>
 
@@ -2369,6 +2372,15 @@
         appUpdateStatus.innerHTML = `<span style="color:#f87171;">⚠️ Could not connect to Render server at ${targetUrl}.<br>Error: ${err.message}</span>`;
       }
     };
+
+    const btnPullLiveWeb = document.getElementById("btnPullLiveWeb");
+    if (btnPullLiveWeb) {
+      btnPullLiveWeb.onclick = () => {
+        const targetUrl = (cfgCloudUrl.value.trim() || localStorage.getItem("cloud_relay_url") || "https://anylocal.onrender.com").replace(/\/+$/, "");
+        showToast("🌐 Pulling live Web UI from server...");
+        window.location.href = `${targetUrl}/?t=${Date.now()}`;
+      };
+    }
 
     // Initial Render
     renderHomePcList();

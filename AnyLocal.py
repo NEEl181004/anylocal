@@ -1521,6 +1521,23 @@ class AnyLocalApp:
         btn_check = tk.Button(c3, text="🔄 Check for Updates Now", bg="#0284c7", fg="#ffffff", font=("Segoe UI", 9, "bold"), relief=tk.FLAT, padx=12, pady=5, command=do_check_update)
         btn_check.pack(anchor="w")
 
+        def do_git_sync():
+            lbl_update_status.config(text="Pulling latest files and code from GitHub...", fg="#38bdf8")
+            modal.update()
+            import subprocess
+            try:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                res = subprocess.run(["git", "pull", "origin", "main"], cwd=base_dir, capture_output=True, text=True, timeout=20)
+                if res.returncode == 0:
+                    lbl_update_status.config(text=f"✅ Files updated successfully!\n{res.stdout.strip()[:100]}", fg="#22c55e")
+                else:
+                    lbl_update_status.config(text=f"⚠️ Git Sync notice:\n{res.stderr.strip()[:100] or res.stdout.strip()[:100]}", fg="#facc15")
+            except Exception as e:
+                lbl_update_status.config(text=f"⚠️ Could not pull: {e}", fg="#f87171")
+
+        btn_sync = tk.Button(c3, text="📥 Pull Latest Code & Sync Files", bg="#059669", fg="#ffffff", font=("Segoe UI", 9, "bold"), relief=tk.FLAT, padx=12, pady=5, command=do_git_sync)
+        btn_sync.pack(anchor="w", pady=(6, 0))
+
         tk.Button(modal, text="Close", bg="#334155", fg="white", relief=tk.FLAT, font=("Segoe UI", 9), padx=16, command=modal.destroy).pack(pady=(0, 10))
 
     def _setup_system_tray(self):
