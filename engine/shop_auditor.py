@@ -509,17 +509,22 @@ class ShopAuditor:
                     "quick software", "quicksoft", "lugda bazaar", "lugda", "working company", "fast search", "quick setup"
                 ])
 
-                # --- EVENT 2: Sales List Opening (Ctrl+L date filter dialog or Ctrl+R refresh) ---
-                ctrl_l_recent = (now - getattr(self, "ctrl_l_time", 0.0)) < 10.0
-                ctrl_r_recent = (now - getattr(self, "ctrl_r_time", 0.0)) < 10.0
+                # --- EVENT 2: Sales List Opening (Ctrl+L date filter dialog or Refresh button click / Ctrl+R) ---
+                ctrl_l_recent = (now - getattr(self, "ctrl_l_time", 0.0)) < 12.0
+                ctrl_r_recent = (now - getattr(self, "ctrl_r_time", 0.0)) < 12.0
                 is_date_filter_dialog = (
-                    ("from date" in joined_all or "date from" in joined_all or "date" in joined_all) and
-                    ("item" in joined_all or "refresh" in joined_all or ctrl_l_recent) and
+                    ("from date" in joined_all or "date from" in joined_all or ("from" in joined_all and "to" in joined_all)) and
+                    ("refresh" in joined_all or "item" in joined_all or ctrl_l_recent) and
                     class_name in ("#32770", "Dialog", "FoxBlkid")
                 )
 
-                if is_date_filter_dialog or (ctrl_r_recent and "sales add" not in joined_all):
-                    if now - self.last_sales_list_alert_time > 15.0:
+                if is_date_filter_dialog:
+                    self.date_filter_dialog_time = now
+
+                was_in_date_dialog = (now - getattr(self, "date_filter_dialog_time", 0.0)) < 10.0
+
+                if (ctrl_r_recent or was_in_date_dialog) and not is_sales_add and "sales" in joined_all:
+                    if now - self.last_sales_list_alert_time > 12.0:
                         self.last_sales_list_alert_time = now
                         self.emit_alert(
                             event_type="SALES_LIST_OPENED",
@@ -553,12 +558,13 @@ class ShopAuditor:
             "sales list" in joined or
             ("sales" in joined and "list" in joined) or
             ("vch. no." in joined and ("total qty" in joined or "retail/tax" in joined or "cash/credit" in joined)) or
-            ("sales" in joined and any(w in joined for w in ["debtors", "cash account", "g. amount", "vch.", "working company"]))
+            ("sales" in joined and any(w in joined for w in ["debtors", "cash account", "g. amount", "vch.", "working company"])) or
+            ((now - getattr(self, "date_filter_dialog_time", 0.0) < 10.0) and not is_sales_add)
         )
 
         # --- EVENT 2: Sales List Opened ---
         if is_sales_list and not is_sales_add:
-            if now - self.last_sales_list_alert_time > 15.0:  # Debounce 15s
+            if now - self.last_sales_list_alert_time > 12.0:  # Debounce 12s
                 self.last_sales_list_alert_time = now
                 self.emit_alert(
                     event_type="SALES_LIST_OPENED",
